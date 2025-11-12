@@ -2,7 +2,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.IO; // YENİ: StringReader için eklendi
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -12,8 +12,9 @@ using WpfIndexer.Helpers;
 using WpfIndexer.Models;
 using WpfIndexer.Services;
 using WpfIndexer.Views;
-using Microsoft.Extensions.Logging; // ILogger<T> için
-using Serilog; // ILogger (Serilog arayüzü) için
+using Microsoft.Extensions.Logging;
+using System.Drawing.Imaging;
+using Serilog;
 using Lucene.Net.Store;
 using System.Collections.Generic;
 using Microsoft.Win32;
@@ -21,12 +22,20 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Lucene.Net.Index;
 
-// YENİ 'USING' BİLDİRİMLERİ (ADIM 4.1)
-using Lucene.Net.Util; // AppLuceneVersion için
-using Lucene.Net.Search; // Query sınıfı için
-using Lucene.Net.Search.Highlight; // Highlighter, QueryScorer, IFormatter, SimpleHtmlFormatter için
-using Lucene.Net.Analysis; // TokenStream için
-using Lucene.Net.Analysis.Standard; // StandardAnalyzer için
+// Lucene 'using'
+using Lucene.Net.Util;
+using Lucene.Net.Search;
+using Lucene.Net.Search.Highlight;
+using Lucene.Net.Analysis;
+using Lucene.Net.Analysis.Standard;
+
+// Canlı Mod için 'using'
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Xml.Linq;
+using OpenXmlPowerTools;
+using DocumentFormat.OpenXml.Packaging;
+using ClosedXML.Excel;
 
 [assembly: System.Runtime.Versioning.SupportedOSPlatform("windows")]
 
@@ -34,25 +43,23 @@ namespace WpfIndexer.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged
     {
-        // YENİ: AppLuceneVersion sabiti eklendi (Highlighter için gerekli)
         private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
 
         // Servisler
         private readonly IIndexService _indexService;
-        private readonly ILogger<MainViewModel> _logger; // system.log için
+        private readonly ILogger<MainViewModel> _logger;
         private readonly SearchHistoryService _searchHistoryService;
-        private readonly Serilog.ILogger _searchLogger; // arama.log için (DI'dan gelecek)
+        private readonly Serilog.ILogger _searchLogger;
         private readonly CsvExportService _csvExportService;
         private readonly AutoUpdateService _autoUpdateService;
 
-        // YENİ ALAN (ADIM 4.2): Lucene'den gelen asıl sorgu nesnesini sakla
         private Query? _lastExecutedLuceneQuery;
+        private CancellationTokenSource? _previewCts;
 
         // Paylaşılan ayar/veri servisleri
         public IndexSettingsService IndexSettings { get; }
         public UserSettings UserSettings { get; }
 
-        // ... (Tüm diğer özellikleriniz (SearchResults, Query, vb.) SİZİN KODUNUZDAKİ GİBİ AYNI) ...
         public ObservableCollection<SearchResult> SearchResults { get; } = new();
         private string _query = string.Empty;
         public string Query
@@ -81,18 +88,18 @@ namespace WpfIndexer.ViewModels
             {
                 _selectedSearchResult = value;
                 OnPropertyChanged();
-                _ = LoadPreviewAsync(); // GÜNCELLENDİ: Vurgulama bu metodun İÇİNE taşındı
+                _ = LoadPreviewAsync();
                 (OpenFileLocationCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
         private string _statusMessage = "Hazır.";
         public string StatusMessage { get => _statusMessage; set { _statusMessage = value; OnPropertyChanged(); } }
 
-        // Bu özellik sizin kodunuzdaki gibi kalıyor (Ham metin için)
+        // Rapor Modu: Ham metin
         private string _selectedPreviewContent = string.Empty;
         public string SelectedPreviewContent { get => _selectedPreviewContent; set { _selectedPreviewContent = value; OnPropertyChanged(); } }
 
-        // YENİ ÖZELLİK (ADIM 4.2): Vurgulanmış metni tutar
+        // Rapor Modu: Vurgulanmış metin
         private string _highlightedPreviewContent = string.Empty;
         public string HighlightedPreviewContent
         {
@@ -100,11 +107,13 @@ namespace WpfIndexer.ViewModels
             set { _highlightedPreviewContent = value; OnPropertyChanged(); }
         }
 
-        // ... (Diğer önizleme özellikleriniz (ImagePath, VideoPath, Visibility vb.) SİZİN KODUNUZDAKİ GİBİ AYNI) ...
+        // Resim/Video Önizleme (Her iki modda da ortak)
         private string? _selectedPreviewImagePath;
         public string? SelectedPreviewImagePath { get => _selectedPreviewImagePath; set { _selectedPreviewImagePath = value; OnPropertyChanged(); } }
         private Uri? _selectedPreviewVideoPath;
         public Uri? SelectedPreviewVideoPath { get => _selectedPreviewVideoPath; set { _selectedPreviewVideoPath = value; OnPropertyChanged(); } }
+
+        // Canlı Mod: WebView (PDF, HTML, vb.)
         private Uri? _selectedPreviewWebViewUri;
         public Uri? SelectedPreviewWebViewUri
         {
@@ -118,13 +127,17 @@ namespace WpfIndexer.ViewModels
             get => _webViewPreviewVisibility;
             set { _webViewPreviewVisibility = value; OnPropertyChanged(); }
         }
-        // DEĞİŞTİRİLDİ: Rapor Modu kontrolü eklendi
+
+        // Görünürlük Özellikleri
         public Visibility TextPreviewVisibility => UserSettings.EnablePreview &&
                                                   UserSettings.PreviewMode == PreviewMode.Rapor &&
                                                   _selectedPreviewContent.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+
         public Visibility ImagePreviewVisibility => UserSettings.EnablePreview && _selectedPreviewImagePath != null ? Visibility.Visible : Visibility.Collapsed;
+
         private Visibility _videoPreviewVisibility = Visibility.Collapsed;
         public Visibility VideoPreviewVisibility { get => _videoPreviewVisibility; set { _videoPreviewVisibility = value; OnPropertyChanged(); } }
+
         public Visibility UnsupportedPreviewVisibility
         {
             get
@@ -133,7 +146,7 @@ namespace WpfIndexer.ViewModels
                 if (TextPreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
                 if (ImagePreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
                 if (VideoPreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
-                if (WebViewPreviewVisibility == Visibility.Visible) return Visibility.Collapsed; // YENİ EKLENDİ
+                if (WebViewPreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
                 return Visibility.Visible;
             }
         }
@@ -148,7 +161,7 @@ namespace WpfIndexer.ViewModels
             set { _unsupportedMessage = value; OnPropertyChanged(); }
         }
 
-        // ... (Tüm Komutlarınız SİZİN KODUNUZDAKİ GİBİ AYNI) ...
+        // Komutlar
         public ICommand SearchCommand { get; }
         public RelayCommand OpenFileLocationCommand { get; }
         public ICommand SelectSuggestionCommand { get; }
@@ -161,7 +174,7 @@ namespace WpfIndexer.ViewModels
         public ICommand ExportResultsCommand { get; }
         public ICommand ExitApplicationCommand { get; }
 
-        // Constructor (SİZİN KODUNUZDAKİ GİBİ AYNI)
+        // Constructor
         public MainViewModel(
             IIndexService indexService,
             IndexSettingsService indexSettingsService,
@@ -169,8 +182,8 @@ namespace WpfIndexer.ViewModels
             SearchHistoryService searchHistoryService,
             AutoUpdateService autoUpdateService,
             CsvExportService csvExportService,
-            ILogger<MainViewModel> logger, // system.log için
-            Serilog.ILogger searchLogger) // arama.log için
+            ILogger<MainViewModel> logger,
+            Serilog.ILogger searchLogger)
         {
             _indexService = indexService;
             IndexSettings = indexSettingsService;
@@ -181,7 +194,7 @@ namespace WpfIndexer.ViewModels
             _logger = logger;
             _searchLogger = searchLogger;
 
-            // Komut tanımlamaları (SİZİN KODUNUZDAKİ GİBİ AYNI)
+            // Komut tanımlamaları
             SearchCommand = new RelayCommand(async _ => await SearchAsync(), _ => !string.IsNullOrWhiteSpace(Query));
             OpenFileLocationCommand = new RelayCommand(_ => OpenFileLocation(), _ => SelectedSearchResult != null);
             SelectSuggestionCommand = new RelayCommand(SelectSuggestion);
@@ -196,19 +209,12 @@ namespace WpfIndexer.ViewModels
 
             _autoUpdateService.StatusChanged += (status) =>
             {
-                // Arka plandaki bir thread'den gelebilir, UI thread'ine al
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    StatusMessage = status; // MEVCUT StatusMessage özelliğini güncelle
-                });
+                Application.Current.Dispatcher.Invoke(() => { StatusMessage = status; });
             };
-
-            // YENİ: Servisi BAŞLAT
             _autoUpdateService.Start();
-
             StatusMessage = "Uygulama başlatıldı. Servisler yükleniyor...";
 
-            // Değişiklik dinleyicileri (SİZİN KODUNUZDAKİ GİBİ AYNI)
+            // Değişiklik dinleyicileri
             UserSettings.PropertyChanged += OnSettingsChanged;
             IndexSettings.Indexes.CollectionChanged += (s, e) =>
             {
@@ -227,36 +233,33 @@ namespace WpfIndexer.ViewModels
             _logger.LogInformation("MainViewModel başlatıldı. {IndexCount} indeks yüklendi.", IndexSettings.Indexes.Count);
         }
 
-        // Bu metotlar SİZİN KODUNUZDAKİ GİBİ AYNI
+        // Ayar değişikliklerini dinle
         private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
         {
-            // Ayarlar değiştiğinde (örn: Önizlemeyi aç/kapa)
             if (e.PropertyName == nameof(UserSettings.EnablePreview))
             {
-                // Önizleme görünürlüklerini yeniden tetikle
                 OnPropertyChanged(nameof(TextPreviewVisibility));
                 OnPropertyChanged(nameof(ImagePreviewVisibility));
                 OnPropertyChanged(nameof(VideoPreviewVisibility));
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                 OnPropertyChanged(nameof(UnsupportedMessage));
             }
+
             if (e.PropertyName == nameof(UserSettings.PreviewMode))
-                _ = LoadPreviewAsync();
             {
+                _ = LoadPreviewAsync();
             }
         }
 
         private void OnIndexPropertyChanged(object? sender, PropertyChangedEventArgs e)
         {
-            // Bir indeksin 'IsSelected' özelliği değiştiğinde
             if (e.PropertyName == nameof(IndexDefinition.IsSelected))
             {
-                // 'Ara' butonunun durumunu güncelle
                 (SearchCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
 
-        // GÜNCELLENMİŞ METOT (ADIM 4.3)
+        // Arama Metodu
         private async Task SearchAsync()
         {
             if (string.IsNullOrWhiteSpace(Query)) return;
@@ -280,11 +283,9 @@ namespace WpfIndexer.ViewModels
             {
                 var stopwatch = Stopwatch.StartNew();
 
-                // YENİ: Dönüş 'results' -> 'response' oldu (Adım 2'ye dayanarak)
                 var response = await _indexService.SearchAsync(Query, validIndexPaths, UserSettings.DefaultSearchResultLimit);
                 stopwatch.Stop();
 
-                // YENİ: Query nesnesini sakla
                 _lastExecutedLuceneQuery = response.LuceneQuery;
 
                 if (_lastExecutedLuceneQuery == null && !string.IsNullOrEmpty(Query))
@@ -296,18 +297,15 @@ namespace WpfIndexer.ViewModels
                 Application.Current.Dispatcher.Invoke(() =>
                 {
                     SearchResults.Clear();
-                    // GÜNCELLENDİ: 'results' -> 'response.Results'
                     foreach (var item in response.Results)
                         SearchResults.Add(item);
 
-                    // GÜNCELLENDİ: 'results.Count' -> 'response.Results.Count'
                     StatusMessage = $"{response.Results.Count} sonuç {stopwatch.Elapsed.TotalSeconds:F2} saniyede bulundu.";
                     _logger.LogInformation("Arama tamamlandı: Sorgu '{Query}', Sonuç: {ResultCount}, Süre: {Duration}ms", Query, response.Results.Count, stopwatch.ElapsedMilliseconds);
 
                     UpdateCommandCanExecute();
                 });
 
-                // GÜNCELLENDİ: 'results.Count' -> 'response.Results.Count'
                 if (UserSettings.SaveSearchHistory)
                 {
                     await _searchHistoryService.AddSearchTermAsync(Query);
@@ -321,7 +319,7 @@ namespace WpfIndexer.ViewModels
             }
         }
 
-        // ValidateSelectedIndexes (SİZİN KODUNUZDAKİ GİBİ AYNI)
+        // İndeksleri Doğrulama
         private (List<string> ValidPaths, string FirstInvalidName) ValidateSelectedIndexes()
         {
             var selectedIndexes = IndexSettings.Indexes.Where(i => i.IsSelected).ToList();
@@ -356,7 +354,7 @@ namespace WpfIndexer.ViewModels
             return (validPaths, firstInvalidName);
         }
 
-        // UpdateSuggestionsAsync (SİZİN KODUNUZDAKİ GİBİ AYNI)
+        // Arama Önerileri
         private async Task UpdateSuggestionsAsync(string query)
         {
             if (!UserSettings.ShowSearchSuggestions || string.IsNullOrWhiteSpace(query) || query.Length < 2)
@@ -381,7 +379,7 @@ namespace WpfIndexer.ViewModels
             }
         }
 
-        // SelectSuggestion (SİZİN KODUNUZDAKİ GİBİ AYNI)
+        // Öneri Seçimi
         private void SelectSuggestion(object? selectedItem)
         {
             if (selectedItem is string suggestion)
@@ -393,7 +391,7 @@ namespace WpfIndexer.ViewModels
             }
         }
 
-        // OpenWindow<T> (Her iki versiyon da SİZİN KODUNUZDAKİ GİBİ AYNI)
+        // --- PENCERE AÇMA METODLARI ---
         private void OpenWindow<T>() where T : Window
         {
             try
@@ -433,13 +431,13 @@ namespace WpfIndexer.ViewModels
             }
         }
 
-        // OpenLogFile (SİZİN KODUNUZDAKİ GİBİ AYNI)
+        // --- LOG DOSYALARI ---
         private void OpenLogFile(string logFileName)
         {
             try
             {
                 string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", logFileName);
-                if (!File.Exists(logPath))
+                if (!System.IO.File.Exists(logPath))
                 {
                     MessageBox.Show($"Log dosyası henüz oluşturulmamış: {logPath}", "Dosya Bulunamadı", MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
@@ -453,7 +451,7 @@ namespace WpfIndexer.ViewModels
             }
         }
 
-        // ExportResults (SİZİN KODUNUZDAKİ GİBİ AYNI)
+        // --- DIŞA AKTARMA ---
         private void ExportResults()
         {
             if (!SearchResults.Any()) return;
@@ -468,7 +466,7 @@ namespace WpfIndexer.ViewModels
                 try
                 {
                     string csvData = _csvExportService.ExportToCsv(SearchResults);
-                    File.WriteAllText(sfd.FileName, csvData, Encoding.UTF8);
+                    System.IO.File.WriteAllText(sfd.FileName, csvData, Encoding.UTF8);
                     StatusMessage = $"Sonuçlar başarıyla dışa aktarıldı: {sfd.FileName}";
                     _logger.LogInformation("Arama sonuçları CSV'ye aktarıldı: {FilePath}", sfd.FileName);
                 }
@@ -480,18 +478,21 @@ namespace WpfIndexer.ViewModels
             }
         }
 
-        // LoadPreviewAsync'nin GÜNCELLENMİŞ TAMAMI
+        // -------------------------------------------------------------------
+        // --- ÖNİZLEME (PREVIEW) MANTIĞI ---
+        // -------------------------------------------------------------------
+
         private async Task LoadPreviewAsync()
         {
-            // 1. Tüm önizleyicileri sıfırla
+            _previewCts?.Cancel();
+            _previewCts = new CancellationTokenSource();
+            var token = _previewCts.Token;
+
             SelectedPreviewVideoPath = null;
             SelectedPreviewImagePath = null;
-            SelectedPreviewContent = string.Empty; // Rapor modu içeriği
-            SelectedPreviewWebViewUri = null;      // Canlı mod içeriği
+            SelectedPreviewContent = string.Empty;
+            SelectedPreviewWebViewUri = null;
             WebViewPreviewVisibility = Visibility.Collapsed;
-
-            // finally bloğu HighlightPreviewContent() çağıracak, 
-            // bu da SelectedPreviewContent'i (boş) HighlightedPreviewContent'e atayacak.
 
             if (SelectedSearchResult == null)
             {
@@ -503,7 +504,6 @@ namespace WpfIndexer.ViewModels
             var path = SelectedSearchResult.Path;
             var ext = SelectedSearchResult.Extension.ToLowerInvariant();
 
-            // 2. Arşiv içi dosyalar (Her iki modda da desteklenmiyor)
             if (path.Contains("|"))
             {
                 UnsupportedMessage = $"'{Path.GetFileName(path)}' bir arşivin (ZIP, RAR vb.) içindedir.\n\nÖnizleme şu anda arşiv içi dosyalar için desteklenmemektedir.";
@@ -511,80 +511,103 @@ namespace WpfIndexer.ViewModels
                 return;
             }
 
-            if (!File.Exists(path))
+            if (!System.IO.File.Exists(path))
             {
                 UnsupportedMessage = $"Dosya bulunamadı: {path}";
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                 return;
             }
 
-            // 3. Dosya türüne göre yönlendirme (İç try-catch)
             try
             {
-                // 3a. Resim/Video (Her iki modda da aynı davranır)
+                // Resim/Video (Her iki modda da ortak)
                 if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".gif" || ext == ".tiff" || ext == ".webp")
                 {
                     SelectedPreviewImagePath = path;
                     OnPropertyChanged(nameof(ImagePreviewVisibility));
-                    return; // finally bloğu çalışacak
+                    return;
                 }
                 if (ext == ".mp4" || ext == ".wmv" || ext == ".avi" || ext == ".mkv" || ext == ".mov" || ext == ".mpeg" || ext == ".webm")
                 {
                     string thumb = await Task.Run(() => FileProcessor.ExtractVideoThumbnail(path));
-                    if (File.Exists(thumb))
+
+                    if (System.IO.File.Exists(thumb))
                     {
                         SelectedPreviewImagePath = thumb;
                         OnPropertyChanged(nameof(ImagePreviewVisibility));
-                        return; // finally bloğu çalışacak
+                        return;
                     }
                 }
 
-                // 3b. MODA GÖRE DALLANMA
+                bool livePreviewSuccessful = false;
 
-                // ********* CANLI MOD MANTIĞI *********
+                // ********* ÖNCE CANLI MODU DENE *********
                 if (UserSettings.EnablePreview && UserSettings.PreviewMode == PreviewMode.Canli)
                 {
-                    // WebView2'nin açabileceği PDF, TXT vb. dosyalar
+                    // WebView2'nin doğrudan açabildiği dosyalar (PDF, TXT, vb.)
                     if (ext == ".pdf" || ext == ".txt" || ext == ".log" || ext == ".xml" || ext == ".json" || ext == ".cs" || ext == ".html" || ext == ".css")
                     {
                         SelectedPreviewWebViewUri = new Uri(path);
                         WebViewPreviewVisibility = Visibility.Visible;
-                        return; // finally bloğu çalışacak
+                        livePreviewSuccessful = true;
                     }
+                    // HTML'e DÖNÜŞÜM GEREKEN dosyalar (DOCX, XLSX, CSV)
+                    else if (ext == ".docx" || ext == ".xlsx" || ext == ".csv")
+                    {
+                        StatusMessage = "Canlı önizleme için dosya dönüştürülüyor...";
+                        string? htmlPath = await ConvertFileToHtmlAsync(path, ext, Query, token);
+                        StatusMessage = "Hazır.";
 
-                    // Canlı mod, Office dosyalarını vb. desteklemiyorsa:
-                    UnsupportedMessage = $"Canlı Önizleme modu bu dosya türü ({ext}) için desteklenmemektedir.\n\n'Ayarlar' menüsünden 'Rapor Modu'nu seçerek düz metin içeriğini görmeyi deneyebilirsiniz.";
-                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                    return; // finally bloğu çalışacak
+                        if (token.IsCancellationRequested) return;
+
+                        if (htmlPath != null && System.IO.File.Exists(htmlPath))
+                        {
+                            SelectedPreviewWebViewUri = new Uri(htmlPath);
+                            WebViewPreviewVisibility = Visibility.Visible;
+                            livePreviewSuccessful = true;
+                        }
+                    }
                 }
 
-                // ********* RAPOR MODU MANTIĞI (Mevcut kodunuz) *********
-                if (UserSettings.EnablePreview && UserSettings.PreviewMode == PreviewMode.Rapor)
+                // ********* RAPOR MODU (veya Canlı Mod Başarısız Olursa YEDEK MOD) *********
+                if (UserSettings.EnablePreview && !livePreviewSuccessful)
                 {
-                    StatusMessage = "Önizleme indeksten yükleniyor...";
+                    if (UserSettings.PreviewMode == PreviewMode.Canli)
+                    {
+                        StatusMessage = "Canlı mod desteklenmiyor, Rapor moduna düşülüyor...";
+                    }
+                    else
+                    {
+                        StatusMessage = "Önizleme indeksten yükleniyor...";
+                    }
+
                     var indexDefinition = IndexSettings.Indexes.FirstOrDefault(i => i.Name == SelectedSearchResult.IndexName);
                     if (indexDefinition == null)
                     {
                         UnsupportedMessage = "Hata: İndeks tanımı bulunamadı.";
                         StatusMessage = "Hazır.";
                         OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                        return; // finally bloğu çalışacak
+                        return;
                     }
 
                     string content = await _indexService.GetContentByPathAsync(indexDefinition.IndexPath, SelectedSearchResult.Path);
                     StatusMessage = "Hazır.";
 
+                    if (token.IsCancellationRequested) return;
+
                     if (!string.IsNullOrEmpty(content))
                     {
-                        SelectedPreviewContent = content; // Vurgulama bunu kullanacak
+                        SelectedPreviewContent = content;
                         OnPropertyChanged(nameof(TextPreviewVisibility));
-                        return; // finally bloğu çalışacak
+                        return;
                     }
                 }
 
-                // Hiçbir koşul karşılanmazsa
-                UnsupportedMessage = $"Bu dosya türü ({ext}) için önizleme desteklenmiyor veya dosya boş.";
-                OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+                if (!livePreviewSuccessful)
+                {
+                    UnsupportedMessage = $"Bu dosya türü ({ext}) için önizleme desteklenmiyor veya dosya boş.";
+                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+                }
             }
             catch (Exception ex)
             {
@@ -595,67 +618,217 @@ namespace WpfIndexer.ViewModels
             }
             finally
             {
-                // Vurgulamayı GÜNCELLE (Rapor Modu için)
-                // Canlı Mod'dayken 'SelectedPreviewContent' boş olacağı için 
-                // 'HighlightPreviewContent' sadece boş bir dize atayacaktır, bu da sorun değil.
-                HighlightPreviewContent();
+                if (!token.IsCancellationRequested)
+                {
+                    HighlightPreviewContent();
+                }
             }
         }
 
-        // YENİ YARDIMCI METOT (ADIM 4.4)
+        // --- RAPOR MODU VURGULAMA (Lucene Highlighter) ---
         private void HighlightPreviewContent()
         {
-            // 'SelectedPreviewContent' ayarlandıktan SONRA çalışmalı
             if (!string.IsNullOrEmpty(SelectedPreviewContent) && _lastExecutedLuceneQuery != null)
             {
                 try
                 {
-                    // 1. Vurgulayıcıyı ayarla
                     IFormatter formatter = new SimpleHTMLFormatter("<B>", "</B>");
                     using var analyzer = new StandardAnalyzer(AppLuceneVersion);
                     QueryScorer scorer = new QueryScorer(_lastExecutedLuceneQuery);
                     Highlighter highlighter = new Highlighter(formatter, scorer);
 
-                    // YENİ ÇÖZÜM (KISA METİN SORUNU İÇİN):
-                    // 'Highlighter'a metni bölmemesini, tamamını tek bir parça (fragment) olarak almasını söyle.
                     highlighter.TextFragmenter = new NullFragmenter();
+                    highlighter.MaxDocCharsToAnalyze = 5 * 1024 * 1024;
 
-                    // YENİ ÇÖZÜM (BÜYÜK DOSYA SORUNU İÇİN):
-                    // Analiz edilecek maksimum karakter sayısını artır (örn: 5 MB).
-                    // (Dosyalarınız çok büyükse bu değeri artırabilirsiniz, ancak RAM kullanımını artırır).
-                    highlighter.MaxDocCharsToAnalyze = 5 * 1024 * 1024; // 5 MB sınırı
-
-                    // 2. Metni vurgula
                     using TokenStream tokenStream = analyzer.GetTokenStream("content", new StringReader(SelectedPreviewContent));
-                    // Metnin tamamını tek bir parça olarak al (maxNumFragments: 1)
                     string result = highlighter.GetBestFragments(tokenStream, SelectedPreviewContent, 1, "...");
 
-                    if (string.IsNullOrEmpty(result))
-                    {
-                        // Eşleşme bulamazsa (veya GetBestFragments boş dönerse), düz metni ata
-                        HighlightedPreviewContent = SelectedPreviewContent;
-                    }
-                    else
-                    {
-                        // Vurgulanmış metni ata
-                        HighlightedPreviewContent = result;
-                    }
+                    HighlightedPreviewContent = string.IsNullOrEmpty(result) ? SelectedPreviewContent : result;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Vurgulama sırasında hata oluştu.");
-                    HighlightedPreviewContent = SelectedPreviewContent; // Hata olursa düz metni göster
+                    _logger.LogError(ex, "Rapor Modu vurgulaması sırasında hata oluştu.");
+                    HighlightedPreviewContent = SelectedPreviewContent;
                 }
             }
             else
             {
-                // Metin yoksa (örn. resim/video gösteriliyorsa veya hata oluştuysa)
-                // vurgulanmış içeriği de temizle
-                HighlightedPreviewContent = SelectedPreviewContent; // (boş string'e eşit olacak)
+                HighlightedPreviewContent = SelectedPreviewContent;
             }
         }
 
-        // OpenFileLocation (SİZİN KODUNUZDAKİ GİBİ AYNI)
+        // --- CANLI MOD VURGULAMA (HTML <mark> etiketi) ---
+        private string ApplyHtmlHighlighting(string htmlContent, string rawQuery)
+        {
+            if (string.IsNullOrWhiteSpace(htmlContent) || string.IsNullOrWhiteSpace(rawQuery))
+            {
+                return htmlContent;
+            }
+
+            var terms = rawQuery.Split(new[] { ' ', '"', '(', ')', '[', ']', ':', '*' },
+                                       StringSplitOptions.RemoveEmptyEntries)
+                                .Except(new[] { "AND", "OR", "NOT" }, StringComparer.OrdinalIgnoreCase)
+                                .Distinct()
+                                .Where(t => t.Length > 1)
+                                .OrderByDescending(t => t.Length)
+                                .ToList();
+
+            if (!terms.Any()) return htmlContent;
+
+            string pattern = "(>)([^<]*)(<)";
+
+            return Regex.Replace(htmlContent, pattern, m =>
+            {
+                string textBetweenTags = m.Groups[2].Value;
+                foreach (var term in terms)
+                {
+                    textBetweenTags = Regex.Replace(textBetweenTags,
+                        Regex.Escape(term),
+                        match => $"<mark style='background:yellow; color:black;'>{match.Value}</mark>",
+                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                }
+                return m.Groups[1].Value + textBetweenTags + m.Groups[3].Value;
+            }, RegexOptions.CultureInvariant);
+        }
+
+        private async Task<string?> ConvertFileToHtmlAsync(string sourcePath, string extension, string rawQuery, CancellationToken token)
+        {
+            string tempHtmlDir = Path.Combine(Path.GetTempPath(), "WpfIndexerPreview");
+            System.IO.Directory.CreateDirectory(tempHtmlDir);
+            string tempHtmlPath = Path.Combine(tempHtmlDir, $"preview_{Guid.NewGuid()}.html");
+            string htmlContent = string.Empty;
+
+            if (token.IsCancellationRequested) return null;
+
+            try
+            {
+                // ********* .DOCX İÇİN (OpenXmlPowerTools) *********
+                if (extension == ".docx")
+                {
+                    await Task.Run(() =>
+                    {
+                        if (token.IsCancellationRequested) return;
+
+                        byte[] byteArray = System.IO.File.ReadAllBytes(sourcePath);
+                        using (var memoryStream = new MemoryStream())
+                        {
+                            memoryStream.Write(byteArray, 0, byteArray.Length);
+                            memoryStream.Position = 0;
+
+                            using (var wDoc = WordprocessingDocument.Open(memoryStream, true))
+                            {
+                                Func<ImageInfo, XElement> imageHandler = imageInfo =>
+                                {
+                                    using (var ms = new MemoryStream())
+                                    {
+                                        imageInfo.Bitmap.Save(ms, ImageFormat.Png);
+                                        string base64 = Convert.ToBase64String(ms.ToArray());
+                                        return new XElement(Xhtml.img,
+                                            new XAttribute("src", $"data:image/png;base64,{base64}"),
+                                            new XAttribute("width", imageInfo.Bitmap.Width.ToString()),
+                                            new XAttribute("height", imageInfo.Bitmap.Height.ToString()));
+                                    }
+                                };
+
+                                var settings = new HtmlConverterSettings()
+                                {
+                                    ImageHandler = imageHandler,
+                                    PageTitle = "Preview"
+                                };
+
+                                XElement html = HtmlConverter.ConvertToHtml(wDoc, settings);
+                                htmlContent = html.ToString();
+                            }
+                        }
+
+                    }, token);
+                }
+                // ********* .XLSX İÇİN (ClosedXML) *********
+                else if (extension == ".xlsx")
+                {
+                    await Task.Run(() =>
+                    {
+                        if (token.IsCancellationRequested) return;
+
+                        var html = new StringBuilder("<html><head><meta charset='UTF-8'><style>table { border-collapse: collapse; font-family: sans-serif; } th, td { border: 1px solid #ccc; padding: 4px; text-align: left; mso-number-format:\\@; }</style></head><body>");
+
+                        using (var workbook = new XLWorkbook(sourcePath))
+                        {
+                            var ws = workbook.Worksheets.FirstOrDefault(w => w.Visibility == XLWorksheetVisibility.Visible);
+                            if (ws != null)
+                            {
+                                html.Append($"<h2>{ws.Name}</h2><table>");
+                                foreach (var row in ws.RowsUsed().Take(500))
+                                {
+                                    if (token.IsCancellationRequested) return;
+                                    html.Append("<tr>");
+
+                                    // DÜZELTME (Hata CS1503): 'CellsUsed(true)' -> 'CellsUsed(XLCellsUsedOptions.Contents)'
+                                    foreach (var cell in row.CellsUsed(XLCellsUsedOptions.Contents).Take(50))
+                                    {
+                                        html.Append($"<td>{cell.GetFormattedString()}</td>");
+                                    }
+                                    html.Append("</tr>");
+                                }
+                                html.Append("</table>");
+                            }
+                        }
+                        html.Append("</body></html>");
+                        htmlContent = html.ToString();
+                    }, token);
+                }
+                // ********* .CSV İÇİN (Mevcut kod) *********
+                else if (extension == ".csv")
+                {
+                    var html = new StringBuilder("<html><head><meta charset='UTF-8'><style>table { border-collapse: collapse; font-family: sans-serif; } th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }</style></head><body><table>");
+
+                    string[] lines = await System.IO.File.ReadAllLinesAsync(sourcePath, token);
+
+                    if (lines.Length > 0)
+                    {
+                        html.Append("<thead><tr>");
+                        foreach (var cell in lines[0].Split(',')) { html.Append($"<th>{cell}</th>"); }
+                        html.Append("</tr></thead>");
+                        html.Append("<tbody>");
+                        foreach (var line in lines.Skip(1).Take(1000))
+                        {
+                            if (token.IsCancellationRequested) return null;
+                            html.Append("<tr>");
+                            foreach (var cell in line.Split(',')) { html.Append($"<td>{cell}</td>"); }
+                            html.Append("</tr>");
+                        }
+                        html.Append("</tbody>");
+                    }
+                    html.Append("</table></body></html>");
+                    htmlContent = html.ToString();
+                }
+                else
+                {
+                    return null;
+                }
+
+                if (token.IsCancellationRequested) return null;
+
+                // Dönüşen HTML'i vurgula
+                // Hata CS0126 ('string' hatası) bu satırdaydı,
+                // yukarıdaki ImageHandler düzeltildiği için artık çalışacaktır.
+                htmlContent = ApplyHtmlHighlighting(htmlContent, rawQuery);
+
+                if (token.IsCancellationRequested) return null;
+
+                await System.IO.File.WriteAllTextAsync(tempHtmlPath, htmlContent, token);
+                return tempHtmlPath;
+            }
+            catch (Exception ex)
+            {
+                if (!token.IsCancellationRequested)
+                {
+                    _logger.LogError(ex, "{ext} dosyası HTML'e dönüştürülürken hata.", extension);
+                }
+                return null;
+            }
+        }
+        // --- DİĞER METODLAR ---
         private void OpenFileLocation()
         {
             if (SelectedSearchResult == null) return;
@@ -666,7 +839,8 @@ namespace WpfIndexer.ViewModels
                 {
                     path = path.Split('|')[0];
                 }
-                if (!File.Exists(path))
+
+                if (!System.IO.File.Exists(path))
                 {
                     StatusMessage = "Dosya bulunamadı veya artık mevcut değil.";
                     return;
@@ -681,7 +855,6 @@ namespace WpfIndexer.ViewModels
             }
         }
 
-        // UpdateCommandCanExecute (SİZİN KODUNUZDAKİ GİBİ AYNI)
         private void UpdateCommandCanExecute()
         {
             (SearchCommand as RelayCommand)?.RaiseCanExecuteChanged();
@@ -689,32 +862,28 @@ namespace WpfIndexer.ViewModels
             (ExportResultsCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
-        // INotifyPropertyChanged (SİZİN KODUNUZDAKİ GİBİ AYNI)
+        // --- INotifyPropertyChanged ---
         public event PropertyChangedEventHandler? PropertyChanged;
-        // INotifyPropertyChanged (BU METODUN İÇİNİ GÜNCELLİYORUZ)
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-            // SİZİN MANTIĞINIZI VE YENİ MANTIĞI BİRLEŞTİREN GÜNCEL BLOK
             if (name == nameof(SelectedPreviewContent) ||
                 name == nameof(SelectedPreviewImagePath) ||
                 name == nameof(SelectedPreviewVideoPath) ||
-                name == nameof(SelectedPreviewWebViewUri)) // YENİ EKLENDİ
+                name == nameof(SelectedPreviewWebViewUri))
             {
                 OnPropertyChanged(nameof(TextPreviewVisibility));
                 OnPropertyChanged(nameof(ImagePreviewVisibility));
                 OnPropertyChanged(nameof(VideoPreviewVisibility));
-                OnPropertyChanged(nameof(WebViewPreviewVisibility)); // YENİ EKLENDİ
+                OnPropertyChanged(nameof(WebViewPreviewVisibility));
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
             }
 
-            // SİZİN MEVCUT MANTIĞINIZ (Dokunulmadı)
             if (name == nameof(UnsupportedMessage))
             {
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
             }
         }
-
     }
 }
