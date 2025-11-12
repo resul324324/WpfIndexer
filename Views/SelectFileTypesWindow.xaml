@@ -1,0 +1,79 @@
+﻿<Window x:Class="WpfIndexer.Views.SelectFileTypesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:WpfIndexer.Views"
+        mc:Ignorable="d"
+        Title="Dosya Türlerini Seçin" Height="450" Width="400"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize" ShowInTaskbar="False"
+        
+        Background="{DynamicResource WindowBackgroundColor}"
+        Foreground="{DynamicResource TextColor}">
+
+    <Window.Resources>
+        <DataTemplate x:Key="GroupTemplate">
+            <StackPanel Margin="5,10,0,0">
+
+                <CheckBox Content="{Binding GroupName}"
+                          IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                          FontWeight="Bold" />
+
+                <ItemsControl ItemsSource="{Binding FileTypes}" Margin="20,5,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <CheckBox Content="{Binding Extension}"
+                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                      Margin="2"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" Margin="0,5,0,0">
+            <StackPanel>
+
+                <ContentPresenter Content="{Binding RecommendedGroup}"
+                                  ContentTemplate="{StaticResource GroupTemplate}" />
+
+                <Separator Margin="5,15,5,5" 
+                           Background="{DynamicResource BorderColor}" 
+                           Height="1" />
+
+                <CheckBox Grid.Row="0"
+                          Content="Tüm Diğer Grupları Seç / Bırak"
+                          IsChecked="{Binding SelectAll, Mode=TwoWay}"
+                          FontWeight="Bold"
+                          Margin="5,10,0,5"/>
+
+                <ItemsControl ItemsSource="{Binding Groups}"
+                              ItemTemplate="{StaticResource GroupTemplate}">
+                </ItemsControl>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Devam" 
+                    Style="{StaticResource BrandButton}"
+                    MinWidth="100" 
+                    IsDefault="True" 
+                    Click="ContinueButton_Click" Margin="0,0,8,0" Height="26" Width="120" />
+
+            <Button Content="İptal" 
+                    Style="{StaticResource BrandButton}"
+                    MinWidth="100" 
+                    Margin="0,0,0,0" 
+                    IsCancel="True" Height="26" Width="120" />
+        </StackPanel>
+    </Grid>
+</Window>

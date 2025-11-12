@@ -1,0 +1,33 @@
+﻿<Window x:Class="WpfIndexer.Views.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="WpfIndexer Hakkında" Height="343" Width="400"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Background="{DynamicResource WindowBackgroundColor}"
+        Foreground="{DynamicResource TextColor}">
+    <StackPanel Margin="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <Image Source="/icons/logo.png" Height="64" Width="64" Margin="0,0,0,10"/>
+        <TextBlock Text="WpfIndexer" FontSize="20" FontWeight="Bold" HorizontalAlignment="Center"/>
+        <TextBlock Text="Sürüm 1.0 (Refactored)" HorizontalAlignment="Center" Margin="0,0,0,15"
+                   Foreground="{DynamicResource GrayTextColor}"/>
+
+        <TextBlock TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,10">
+            Bu uygulama, yerel dosyalarınızın içeriğini hızlıca indekslemek ve
+            gelişmiş sorgularla aramak için Lucene.Net kütüphanesini kullanır.
+        </TextBlock>
+
+        <TextBlock TextAlignment="Center">
+            <Run Text="Proje,"/>
+            <Hyperlink NavigateUri="https://github.com/apache/lucenenet" RequestNavigate="Hyperlink_RequestNavigate">
+                Lucene.Net
+            </Hyperlink>
+            <Run Text="ve"/>
+            <Hyperlink NavigateUri="https://github.com/serilog/serilog" RequestNavigate="Hyperlink_RequestNavigate">
+                Serilog
+            </Hyperlink>
+            <Run Text="gibi açık kaynaklı projelere dayanmaktadır."/>
+        </TextBlock>
+
+        <Button Content="Kapat" Style="{StaticResource BrandButton}" IsCancel="True" MinWidth="100" Margin="0,20,0,0"/>
+    </StackPanel>
+</Window>

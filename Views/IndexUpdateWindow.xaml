@@ -1,0 +1,112 @@
+﻿<Window x:Class="WpfIndexer.Views.IndexUpdateWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:helpers="clr-namespace:WpfIndexer.Helpers" 
+        xmlns:models="clr-namespace:WpfIndexer.Models"
+        Title="İndeks Güncelle" Height="566" Width="640" 
+        WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
+        Background="{DynamicResource WindowBackgroundColor}"
+        Foreground="{DynamicResource TextColor}">
+
+    <Window.Resources>
+        <helpers:EnumToBooleanConverter x:Key="EnumToBooleanConverter"/>
+    </Window.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="İndeks Güncelle" FontSize="16" FontWeight="Bold"/>
+            <TextBlock Text="Seçili indeksin ayarları yüklenmiştir. 'Güncelle' ile işlem başlar."
+                       Foreground="{DynamicResource GrayTextColor}"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Margin="0,8,0,8">
+            <TextBlock Text="İndeks Adı:" FontWeight="SemiBold"/>
+            <TextBox Text="{Binding IndexName, Mode=OneWay}" IsReadOnly="True" />
+
+            <TextBlock Text="Kaynak Klasör:" FontWeight="SemiBold" Margin="0,8,0,0"/>
+            <TextBox Text="{Binding SourcePath, Mode=OneWay}" IsReadOnly="True" />
+
+            <TextBlock Text="OCR Kalitesi:" FontWeight="SemiBold" Margin="0,8,0,0"/>
+            <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="10" CornerRadius="4" Margin="0,4,0,0"
+                    Background="{DynamicResource ControlBackgroundColor}">
+                <StackPanel>
+                    <RadioButton Content="OCR Kapalı" GroupName="Ocr" 
+                                 IsChecked="{Binding Path=SelectedOcrQuality, ConverterParameter={x:Static models:OcrQuality.Off}, Converter={StaticResource EnumToBooleanConverter}}"/>
+
+                    <RadioButton GroupName="Ocr" Margin="0,5,0,0"
+                                 IsChecked="{Binding Path=SelectedOcrQuality, ConverterParameter={x:Static models:OcrQuality.Low}, Converter={StaticResource EnumToBooleanConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Düşük (Hızlı)" FontWeight="SemiBold"/>
+                            <TextBlock Text=" - (Küçük/eğri metinleri okuyamaz)" Foreground="{DynamicResource GrayTextColor}" Margin="5,0,0,0"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <RadioButton GroupName="Ocr" Margin="0,5,0,0"
+                                 IsChecked="{Binding Path=SelectedOcrQuality, ConverterParameter={x:Static models:OcrQuality.Balanced}, Converter={StaticResource EnumToBooleanConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Dengeli" FontWeight="SemiBold"/>
+                            <TextBlock Text=" - (Çoğu metni okur, orta hızda)" Foreground="{DynamicResource GrayTextColor}" Margin="5,0,0,0"/>
+                        </StackPanel>
+                    </RadioButton>
+
+                    <RadioButton GroupName="Ocr" Margin="0,5,0,0"
+                                 IsChecked="{Binding Path=SelectedOcrQuality, ConverterParameter={x:Static models:OcrQuality.High}, Converter={StaticResource EnumToBooleanConverter}}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Yüksek (Yavaş)" FontWeight="SemiBold"/>
+                            <TextBlock Text=" - ('Best' modelleri kullanır, en yüksek doğruluk)" Foreground="DarkRed" Margin="5,0,0,0"/>
+                        </StackPanel>
+                    </RadioButton>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="Dosya Türleri:" FontWeight="SemiBold" Margin="0,8,0,0"/>
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <Button Content="Dosya Türlerini Seç..." Command="{Binding OpenSelectFileTypesCommand}" Style="{StaticResource BrandButton}"/>
+                <TextBlock Text="{Binding SelectedExtensionsSummary}" Margin="12,4,0,0" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </StackPanel>
+
+
+            <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="8" CornerRadius="4" Margin="0,12,0,0"
+                    Background="{DynamicResource ControlBackgroundColor}" Height="143">
+                <StackPanel>
+                    <TextBlock Text="{Binding StatusMessage}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding CurrentFile}" FontSize="11" Foreground="{DynamicResource GrayTextColor}" TextTrimming="CharacterEllipsis"/>
+
+                    <ProgressBar Minimum="0" 
+                                 Maximum="{Binding ProgressMax}" 
+                                 Value="{Binding ProgressValue}" 
+                                 IsIndeterminate="{Binding IsIndeterminate}"
+                                 Height="18" Margin="0,6,0,0" />
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                        <TextBlock Text="{Binding ProgressCounterText}" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,0"/>
+                        <TextBlock Text="{Binding ProgressPercentage}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                        <TextBlock Text="Geçen: " VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding ElapsedTime}" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                        <TextBlock Text="Kalan: " VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding RemainingTime}" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                        <Button Content="İptal" Command="{Binding CancelCommand}" Style="{StaticResource BrandButton}" MinWidth="70"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Güncelle" 
+                    Style="{StaticResource BrandButton}"
+                    Command="{Binding StartUpdateCommand}"
+                    MinWidth="120"
+                    Margin="0,0,8,0" Width="110" Height="25" />
+            <Button Content="Kapat" 
+                    Style="{StaticResource BrandButton}"
+                    Command="{Binding CloseCommand}"
+                    MinWidth="80" Height="26" Margin="0,0,0,0" Width="120" />
+        </StackPanel>
+    </Grid>
+</Window>

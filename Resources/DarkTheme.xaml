@@ -1,0 +1,358 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
+    <!-- 
+    ******************************************************************
+    RENK TANIMLARI BÖLÜMÜ
+    ******************************************************************
+    -->
+
+    <!-- Ana Renkler -->
+    <Color x:Key="BrandBlueColor" A="255" R="73" G="138" B="244" />
+    <!-- #498af4 -->
+    <Color x:Key="BrandBlueHoverColor" A="255" R="106" G="169" B="247" />
+    <!-- #6aa9f7 -->
+    <SolidColorBrush x:Key="BrandBlueBrush" Color="{StaticResource BrandBlueColor}"/>
+    <SolidColorBrush x:Key="BrandBlueHoverBrush" Color="{StaticResource BrandBlueHoverColor}"/>
+
+    <!-- Genel UI Renkleri -->
+    <SolidColorBrush x:Key="WindowBackgroundColor" Color="#FF252526"/>
+    <SolidColorBrush x:Key="TextColor" Color="#FFF1F1F1"/>
+    <SolidColorBrush x:Key="GrayTextColor" Color="#FF999999"/>
+    <SolidColorBrush x:Key="BorderColor" Color="#FF434346"/>
+    <SolidColorBrush x:Key="DisabledBackgroundColor" Color="#FF404040"/>
+    <SolidColorBrush x:Key="DisabledBorderColor" Color="#FF505050"/>
+    <SolidColorBrush x:Key="DisabledForegroundColor" Color="#FF707070"/>
+
+    <!-- Kontrol Renkleri -->
+    <SolidColorBrush x:Key="ControlBackgroundColor" Color="#FF2D2D30"/>
+    <SolidColorBrush x:Key="ControlBorderColor" Color="#FF505050"/>
+    <SolidColorBrush x:Key="TextBoxBackgroundColor" Color="#FF3C3C3E"/>
+    <SolidColorBrush x:Key="PreviewBackgroundColor" Color="#FF1E1E1E"/>
+    <SolidColorBrush x:Key="ListViewHeaderBackgroundColor" Color="#FF3C3C3E"/>
+    <SolidColorBrush x:Key="MenuBackgroundColor" Color="#FF2D2D30"/>
+    <SolidColorBrush x:Key="MenuPopupBorderColor" Color="#FF434346"/>
+
+    <!-- DÜZELTME: Menü ve Başlıklar için yeni HOVER renkleri (Artık mavi değil) -->
+    <Color x:Key="HighlightColor"  A="255" R="73" G="138" B="244" />
+    <!-- #3E3E42 (Koyu Gri) -->
+    <Color x:Key="HighlightTextColor" A="255" R="255" G="255" B="255" />
+    <!-- White -->
+    <SolidColorBrush x:Key="MenuItemHoverBackgroundColor" Color="{StaticResource HighlightColor}"/>
+    <SolidColorBrush x:Key="MenuItemHoverTextColor" Color="{StaticResource HighlightTextColor}"/>
+    <StaticResource x:Key="HeaderHoverBackgroundColor" ResourceKey="MenuItemHoverBackgroundColor"/>
+    <StaticResource x:Key="HeaderHoverTextColor" ResourceKey="MenuItemHoverTextColor"/>
+
+    <!-- 
+    ******************************************************************
+    ANAHTARLI (KEYED) STİLLER
+    ******************************************************************
+    -->
+    <Style x:Key="BrandButton" TargetType="Button">
+        <Setter Property="Background" Value="{StaticResource BrandBlueBrush}"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BrandBlueBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="10,8"/>
+        <Setter Property="Margin" Value="0,4,0,4"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{StaticResource BrandBlueHoverBrush}"/>
+                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource BrandBlueHoverBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="border" Property="Background" Value="{StaticResource DisabledBackgroundColor}"/>
+                            <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource DisabledBorderColor}"/>
+                            <Setter Property="Foreground" Value="{StaticResource DisabledForegroundColor}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="BrandCheckBox" TargetType="CheckBox">
+        <Setter Property="BorderBrush" Value="{StaticResource BrandBlueBrush}"/>
+        <Setter Property="Margin" Value="2"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <!-- ToolTip buradan kaldırıldı (Hata CS0161) -->
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <BulletDecorator Background="Transparent" SnapsToDevicePixels="True">
+                        <BulletDecorator.Bullet>
+                            <Grid>
+                                <Border x:Name="Border" Width="13" Height="13" CornerRadius="2"
+                                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                                        Background="{DynamicResource WindowBackgroundColor}"/>
+                                <TextBlock x:Name="CheckMark" Text="✓" FontWeight="Bold"
+                                           Foreground="{StaticResource BrandBlueBrush}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                           Visibility="Collapsed" FontSize="12"/>
+                            </Grid>
+                        </BulletDecorator.Bullet>
+                        <ContentPresenter Margin="5,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                          RecognizesAccessKey="True"/>
+                    </BulletDecorator>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="False">
+                            <Setter TargetName="CheckMark" Property="Visibility" Value="Collapsed"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource BrandBlueHoverBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="SearchButton" TargetType="Button">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource GrayTextColor}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontSize" Value="16"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border Background="Transparent">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{StaticResource BrandBlueBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 
+    ******************************************************************
+    TÜM KONTROLLER İÇİN VARSAYILAN (IMPLICIT) STİLLER
+    ******************************************************************
+    -->
+    <Style TargetType="{x:Type Window}">
+        <Setter Property="Background" Value="{DynamicResource WindowBackgroundColor}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+    </Style>
+    <Style TargetType="{x:Type TextBlock}">
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+    </Style>
+    <Style TargetType="{x:Type TextBox}">
+        <Setter Property="Background" Value="{DynamicResource TextBoxBackgroundColor}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderColor}"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource TextColor}"/>
+        <Setter Property="Padding" Value="3"/>
+        <Style.Triggers>
+            <Trigger Property="IsReadOnly" Value="True">
+                <Setter Property="Background" Value="{DynamicResource ControlBackgroundColor}"/>
+                <Setter Property="Foreground" Value="{DynamicResource GrayTextColor}"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+    <Style TargetType="{x:Type RadioButton}">
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="Padding" Value="3,0"/>
+    </Style>
+
+    <Style TargetType="{x:Type CheckBox}" BasedOn="{StaticResource BrandCheckBox}" />
+
+    <Style TargetType="{x:Type GridViewColumnHeader}">
+        <Setter Property="Background" Value="{DynamicResource ListViewHeaderBackgroundColor}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="Padding" Value="5,3"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type GridViewColumnHeader}">
+                    <Grid>
+                        <Border
+                            x:Name="HeaderBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                            <ContentPresenter
+                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                        </Border>
+                        <Path
+                            x:Name="SortArrow"
+                            Visibility="Collapsed"
+                            Data="M 0,0 L 4,4 L 8,0 Z"
+                            Fill="{DynamicResource GrayTextColor}"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,8,0"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource HeaderHoverBackgroundColor}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource HeaderHoverTextColor}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="HeaderBorder" Property="Background" Value="{DynamicResource HeaderHoverBackgroundColor}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource HeaderHoverTextColor}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="{x:Type ListViewItem}">
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Padding" Value="0"/>
+
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ListViewItem}">
+                    <Border x:Name="Bd"
+                            Background="Transparent"
+                            BorderBrush="Transparent"
+                            BorderThickness="0"
+                            SnapsToDevicePixels="True">
+
+                        <GridViewRowPresenter 
+                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                            SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                    </Border>
+
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BrandBlueBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
+                        </Trigger>
+
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BrandBlueBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
+                        </Trigger>
+
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="True"/>
+                                <Condition Property="IsFocused" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BrandBlueBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style TargetType="{x:Type Menu}">
+        <Setter Property="Background" Value="{DynamicResource MenuBackgroundColor}"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+    </Style>
+
+    <Style TargetType="{x:Type MenuItem}">
+        <Setter Property="Background" Value="{DynamicResource MenuBackgroundColor}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextColor}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource MenuPopupBorderColor}" />
+        <Setter Property="BorderThickness" Value="0"/>
+        <!-- Bonus -->
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <!-- Bonus -->
+        <Setter Property="Padding" Value="6,3,6,3"/>
+        <Setter Property="HorizontalContentAlignment" Value="Left"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+
+
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Grid>
+                        <Border x:Name="Border"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="0" 
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter ContentSource="Header"
+                                              RecognizesAccessKey="False"
+                                              Margin="{TemplateBinding Padding}"
+                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+
+                        <Popup x:Name="SubMenuPopup"
+                               Placement="Right"
+                               IsOpen="{TemplateBinding IsSubmenuOpen}"
+                               AllowsTransparency="True"
+                               Focusable="False"
+                               PopupAnimation="Fade">
+                            <Border Background="{DynamicResource MenuBackgroundColor}"
+                                    BorderBrush="{DynamicResource MenuPopupBorderColor}"
+                                    BorderThickness="1"
+                                    SnapsToDevicePixels="True">
+                                <StackPanel IsItemsHost="True"
+                                            KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{StaticResource DisabledForegroundColor}"/>
+                        </Trigger>
+                        <Trigger Property="Role" Value="TopLevelHeader">
+                            <Setter TargetName="SubMenuPopup" Property="Placement" Value="Bottom"/>
+                            <Setter TargetName="Border" Property="BorderThickness" Value="0"/>
+                        </Trigger>
+                        <Trigger Property="Role" Value="TopLevelItem">
+                            <Setter TargetName="Border" Property="BorderThickness" Value="0"/>
+                        </Trigger>
+                        <Trigger Property="Role" Value="SubmenuHeader">
+                            <Setter TargetName="SubMenuPopup" Property="Placement" Value="Right"/>
+                        </Trigger>
+                        <Trigger Property="Role" Value="SubmenuItem">
+                            <Setter TargetName="SubMenuPopup" Property="Placement" Value="Right"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- DÜZELTME: "Beyaz çizgi" sorununu çözen Separator stili -->
+    <Style TargetType="{x:Type Separator}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Height" Value="0"/>
+        <Setter Property="Margin" Value="0"/>
+        <Setter Property="SnapsToDevicePixels" Value="False"/>
+    </Style>
+
+
+    <Style TargetType="{x:Type ProgressBar}">
+        <Setter Property="Background" Value="{DynamicResource ControlBackgroundColor}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderColor}"/>
+        <Setter Property="Foreground" Value="{DynamicResource BrandBlueBrush}"/>
+    </Style>
+
+</ResourceDictionary>
