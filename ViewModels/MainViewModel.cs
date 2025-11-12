@@ -105,7 +105,23 @@ namespace WpfIndexer.ViewModels
         public string? SelectedPreviewImagePath { get => _selectedPreviewImagePath; set { _selectedPreviewImagePath = value; OnPropertyChanged(); } }
         private Uri? _selectedPreviewVideoPath;
         public Uri? SelectedPreviewVideoPath { get => _selectedPreviewVideoPath; set { _selectedPreviewVideoPath = value; OnPropertyChanged(); } }
-        public Visibility TextPreviewVisibility => UserSettings.EnablePreview && _selectedPreviewContent.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        private Uri? _selectedPreviewWebViewUri;
+        public Uri? SelectedPreviewWebViewUri
+        {
+            get => _selectedPreviewWebViewUri;
+            set { _selectedPreviewWebViewUri = value; OnPropertyChanged(); }
+        }
+
+        private Visibility _webViewPreviewVisibility = Visibility.Collapsed;
+        public Visibility WebViewPreviewVisibility
+        {
+            get => _webViewPreviewVisibility;
+            set { _webViewPreviewVisibility = value; OnPropertyChanged(); }
+        }
+        // DEĞİŞTİRİLDİ: Rapor Modu kontrolü eklendi
+        public Visibility TextPreviewVisibility => UserSettings.EnablePreview &&
+                                                  UserSettings.PreviewMode == PreviewMode.Rapor &&
+                                                  _selectedPreviewContent.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         public Visibility ImagePreviewVisibility => UserSettings.EnablePreview && _selectedPreviewImagePath != null ? Visibility.Visible : Visibility.Collapsed;
         private Visibility _videoPreviewVisibility = Visibility.Collapsed;
         public Visibility VideoPreviewVisibility { get => _videoPreviewVisibility; set { _videoPreviewVisibility = value; OnPropertyChanged(); } }
@@ -117,6 +133,7 @@ namespace WpfIndexer.ViewModels
                 if (TextPreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
                 if (ImagePreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
                 if (VideoPreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
+                if (WebViewPreviewVisibility == Visibility.Visible) return Visibility.Collapsed; // YENİ EKLENDİ
                 return Visibility.Visible;
             }
         }
@@ -222,6 +239,10 @@ namespace WpfIndexer.ViewModels
                 OnPropertyChanged(nameof(VideoPreviewVisibility));
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                 OnPropertyChanged(nameof(UnsupportedMessage));
+            }
+            if (e.PropertyName == nameof(UserSettings.PreviewMode))
+                _ = LoadPreviewAsync();
+            {
             }
         }
 
@@ -459,62 +480,87 @@ namespace WpfIndexer.ViewModels
             }
         }
 
-        // GÜNCELLENMİŞ METOT (ADIM 4.4 - Vurgulama mantığı eklendi)
+        // LoadPreviewAsync'nin GÜNCELLENMİŞ TAMAMI
         private async Task LoadPreviewAsync()
         {
-            // YENİ: Vurgulama mantığını çağırmak için try...finally eklendi
+            // 1. Tüm önizleyicileri sıfırla
+            SelectedPreviewVideoPath = null;
+            SelectedPreviewImagePath = null;
+            SelectedPreviewContent = string.Empty; // Rapor modu içeriği
+            SelectedPreviewWebViewUri = null;      // Canlı mod içeriği
+            WebViewPreviewVisibility = Visibility.Collapsed;
+
+            // finally bloğu HighlightPreviewContent() çağıracak, 
+            // bu da SelectedPreviewContent'i (boş) HighlightedPreviewContent'e atayacak.
+
+            if (SelectedSearchResult == null)
+            {
+                UnsupportedMessage = "Önizleme için bir dosya seçin.";
+                OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+                return;
+            }
+
+            var path = SelectedSearchResult.Path;
+            var ext = SelectedSearchResult.Extension.ToLowerInvariant();
+
+            // 2. Arşiv içi dosyalar (Her iki modda da desteklenmiyor)
+            if (path.Contains("|"))
+            {
+                UnsupportedMessage = $"'{Path.GetFileName(path)}' bir arşivin (ZIP, RAR vb.) içindedir.\n\nÖnizleme şu anda arşiv içi dosyalar için desteklenmemektedir.";
+                OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+                return;
+            }
+
+            if (!File.Exists(path))
+            {
+                UnsupportedMessage = $"Dosya bulunamadı: {path}";
+                OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+                return;
+            }
+
+            // 3. Dosya türüne göre yönlendirme (İç try-catch)
             try
             {
-                // ... (SİZİN MEVCUT KODUNUZ BURADA BAŞLIYOR) ...
-                SelectedPreviewVideoPath = null;
-                SelectedPreviewImagePath = null;
-                SelectedPreviewContent = string.Empty;
-                if (SelectedSearchResult == null)
+                // 3a. Resim/Video (Her iki modda da aynı davranır)
+                if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".gif" || ext == ".tiff" || ext == ".webp")
                 {
-                    UnsupportedMessage = "Önizleme için bir dosya seçin.";
-                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                    return;
+                    SelectedPreviewImagePath = path;
+                    OnPropertyChanged(nameof(ImagePreviewVisibility));
+                    return; // finally bloğu çalışacak
                 }
-                var path = SelectedSearchResult.Path;
-                var ext = SelectedSearchResult.Extension.ToLowerInvariant();
-                if (path.Contains("|"))
+                if (ext == ".mp4" || ext == ".wmv" || ext == ".avi" || ext == ".mkv" || ext == ".mov" || ext == ".mpeg" || ext == ".webm")
                 {
-                    UnsupportedMessage = $"'{Path.GetFileName(path)}' bir arşivin (ZIP, RAR vb.) içindedir.\n\nÖnizleme şu anda arşiv içi dosyalar için desteklenmemektedir.";
-                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                    return;
-                }
-                if (!File.Exists(path))
-                {
-                    UnsupportedMessage = $"Dosya bulunamadı: {path}";
-                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                    return;
+                    string thumb = await Task.Run(() => FileProcessor.ExtractVideoThumbnail(path));
+                    if (File.Exists(thumb))
+                    {
+                        SelectedPreviewImagePath = thumb;
+                        OnPropertyChanged(nameof(ImagePreviewVisibility));
+                        return; // finally bloğu çalışacak
+                    }
                 }
 
-                // İç Try-Catch (SİZİN KODUNUZDAKİ GİBİ AYNI)
-                try
+                // 3b. MODA GÖRE DALLANMA
+
+                // ********* CANLI MOD MANTIĞI *********
+                if (UserSettings.EnablePreview && UserSettings.PreviewMode == PreviewMode.Canli)
                 {
-                    if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".gif" || ext == ".tiff" || ext == ".webp")
+                    // WebView2'nin açabileceği PDF, TXT vb. dosyalar
+                    if (ext == ".pdf" || ext == ".txt" || ext == ".log" || ext == ".xml" || ext == ".json" || ext == ".cs" || ext == ".html" || ext == ".css")
                     {
-                        SelectedPreviewImagePath = path;
-                        OnPropertyChanged(nameof(ImagePreviewVisibility));
-                        return; // finally bloğu buradan önce çalışacak
+                        SelectedPreviewWebViewUri = new Uri(path);
+                        WebViewPreviewVisibility = Visibility.Visible;
+                        return; // finally bloğu çalışacak
                     }
-                    if (ext == ".mp4" || ext == ".wmv" || ext == ".avi" || ext == ".mkv" || ext == ".mov" || ext == ".mpeg" || ext == ".webm")
-                    {
-                        string thumb = await Task.Run(() => FileProcessor.ExtractVideoThumbnail(path));
-                        if (File.Exists(thumb))
-                        {
-                            SelectedPreviewImagePath = thumb;
-                            OnPropertyChanged(nameof(ImagePreviewVisibility));
-                            return; // finally bloğu buradan önce çalışacak
-                        }
-                        else
-                        {
-                            UnsupportedMessage = $"Video ({ext}) önizlemesi yüklenemedi.";
-                            OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                            return; // finally bloğu buradan önce çalışacak
-                        }
-                    }
+
+                    // Canlı mod, Office dosyalarını vb. desteklemiyorsa:
+                    UnsupportedMessage = $"Canlı Önizleme modu bu dosya türü ({ext}) için desteklenmemektedir.\n\n'Ayarlar' menüsünden 'Rapor Modu'nu seçerek düz metin içeriğini görmeyi deneyebilirsiniz.";
+                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+                    return; // finally bloğu çalışacak
+                }
+
+                // ********* RAPOR MODU MANTIĞI (Mevcut kodunuz) *********
+                if (UserSettings.EnablePreview && UserSettings.PreviewMode == PreviewMode.Rapor)
+                {
                     StatusMessage = "Önizleme indeksten yükleniyor...";
                     var indexDefinition = IndexSettings.Indexes.FirstOrDefault(i => i.Name == SelectedSearchResult.IndexName);
                     if (indexDefinition == null)
@@ -522,33 +568,36 @@ namespace WpfIndexer.ViewModels
                         UnsupportedMessage = "Hata: İndeks tanımı bulunamadı.";
                         StatusMessage = "Hazır.";
                         OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                        return; // finally bloğu buradan önce çalışacak
+                        return; // finally bloğu çalışacak
                     }
+
                     string content = await _indexService.GetContentByPathAsync(indexDefinition.IndexPath, SelectedSearchResult.Path);
                     StatusMessage = "Hazır.";
+
                     if (!string.IsNullOrEmpty(content))
                     {
-                        SelectedPreviewContent = content; // Vurgulama bu içeriği kullanacak
+                        SelectedPreviewContent = content; // Vurgulama bunu kullanacak
                         OnPropertyChanged(nameof(TextPreviewVisibility));
-                        return; // finally bloğu buradan önce çalışacak
+                        return; // finally bloğu çalışacak
                     }
-                    UnsupportedMessage = $"Bu dosya türü ({ext}) için önizleme desteklenmiyor veya dosya boş.";
-                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                 }
-                catch (Exception ex)
-                {
-                    StatusMessage = "Hazır.";
-                    UnsupportedMessage = $"Önizleme yüklenirken hata:\n{ex.Message}";
-                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                    _logger.LogError(ex, "Önizleme yüklenirken hata oluştu: {FilePath}", SelectedSearchResult?.Path);
-                }
-                // ... (SİZİN MEVCUT KODUNUZ BURADA BİTİYOR) ...
+
+                // Hiçbir koşul karşılanmazsa
+                UnsupportedMessage = $"Bu dosya türü ({ext}) için önizleme desteklenmiyor veya dosya boş.";
+                OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = "Hazır.";
+                UnsupportedMessage = $"Önizleme yüklenirken hata:\n{ex.Message}";
+                OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+                _logger.LogError(ex, "Önizleme yüklenirken hata oluştu: {FilePath}", SelectedSearchResult?.Path);
             }
             finally
             {
-                // YENİ: VURGULAMAYI GÜNCELLE
-                // Bu 'finally' bloğu, metot 'return' ile çıksa bile
-                // çalışır ve vurgulanmış içeriği ayarlar.
+                // Vurgulamayı GÜNCELLE (Rapor Modu için)
+                // Canlı Mod'dayken 'SelectedPreviewContent' boş olacağı için 
+                // 'HighlightPreviewContent' sadece boş bir dize atayacaktır, bu da sorun değil.
                 HighlightPreviewContent();
             }
         }
@@ -642,23 +691,30 @@ namespace WpfIndexer.ViewModels
 
         // INotifyPropertyChanged (SİZİN KODUNUZDAKİ GİBİ AYNI)
         public event PropertyChangedEventHandler? PropertyChanged;
+        // INotifyPropertyChanged (BU METODUN İÇİNİ GÜNCELLİYORUZ)
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
-            // SİZİN MEVCUT MANTIĞINIZ (Dokunulmadı)
-            if (name == nameof(SelectedPreviewContent) || name == nameof(SelectedPreviewImagePath) || name == nameof(SelectedPreviewVideoPath))
+            // SİZİN MANTIĞINIZI VE YENİ MANTIĞI BİRLEŞTİREN GÜNCEL BLOK
+            if (name == nameof(SelectedPreviewContent) ||
+                name == nameof(SelectedPreviewImagePath) ||
+                name == nameof(SelectedPreviewVideoPath) ||
+                name == nameof(SelectedPreviewWebViewUri)) // YENİ EKLENDİ
             {
                 OnPropertyChanged(nameof(TextPreviewVisibility));
                 OnPropertyChanged(nameof(ImagePreviewVisibility));
                 OnPropertyChanged(nameof(VideoPreviewVisibility));
+                OnPropertyChanged(nameof(WebViewPreviewVisibility)); // YENİ EKLENDİ
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
             }
+
+            // SİZİN MEVCUT MANTIĞINIZ (Dokunulmadı)
             if (name == nameof(UnsupportedMessage))
             {
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
             }
         }
-        
+
     }
 }

@@ -5,6 +5,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:helpers="clr-namespace:WpfIndexer.Helpers"
     xmlns:viewModels="clr-namespace:WpfIndexer.ViewModels"
+    xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
     mc:Ignorable="d"
     Title="WPF Indexer" 
     Height="900" Width="1400"
@@ -234,6 +235,10 @@
                 <Border Grid.Row="1" Background="{DynamicResource PreviewBackgroundColor}" 
                         BorderBrush="{DynamicResource BorderColor}" BorderThickness="1">
                     <Grid>
+                        <wv2:WebView2 x:Name="WebViewer"
+                                      Visibility="{Binding WebViewPreviewVisibility}"
+                                      Source="{Binding SelectedPreviewWebViewUri, Mode=OneWay}"
+                                      DefaultBackgroundColor="Transparent" />
                         <RichTextBox x:Name="PreviewRichTextBox"
                   
                                      IsReadOnly="True"

@@ -9,6 +9,11 @@ namespace WpfIndexer.Models
         Dark,
         SystemDefault
     }
+    public enum PreviewMode
+    {
+        Rapor, // Vurgulamalı düz metin (mevcut sistem)
+        Canli  // Gerçek dosya görünümü (yeni sistem)
+    }
 
     public class UserSettings : INotifyPropertyChanged
     {
@@ -19,7 +24,21 @@ namespace WpfIndexer.Models
             get => _theme;
             set { _theme = value; OnPropertyChanged(); }
         }
-
+        private PreviewMode _previewMode = PreviewMode.Rapor; // Varsayılan Rapor Modu
+        public PreviewMode PreviewMode
+        {
+            get => _previewMode;
+            set
+            {
+                
+                if (_previewMode != value)
+                {
+                    _previewMode = value;
+                   
+                    OnPropertyChanged(nameof(PreviewMode));
+                }
+            }
+        }
         private bool _enablePreview = true;
         public bool EnablePreview
         {
