@@ -19,7 +19,7 @@ namespace WpfIndexer.Views
             InitializeComponent();
         }
 
-        // --- ÇİFT TIKLAMA METODU (Orijinal kodunuzdan) ---
+        // --- ÇİFT TIKLAMA METODU ---
         private void SearchResultsListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (sender is not ListView lv || lv.SelectedItem is not SearchResult selected)
@@ -29,7 +29,7 @@ namespace WpfIndexer.Views
 
             try
             {
-                // Durum 1: Arşiv içi dosya (örn: "C:\arsiv.zip|metin.txt")
+                // Durum 1: Arşiv içi dosya
                 if (path.Contains("|"))
                 {
                     var parts = path.Split(new[] { '|' }, 2);
@@ -43,12 +43,10 @@ namespace WpfIndexer.Views
                         return;
                     }
 
-                    // Geçici klasör oluştur
                     string tempDir = Path.Combine(Path.GetTempPath(), "WpfIndexerPreview");
                     Directory.CreateDirectory(tempDir);
                     tempFile = Path.Combine(tempDir, Path.GetFileName(entryPath));
 
-                    // Arşivi aç ve dosyayı çıkar
                     using (var archive = ArchiveFactory.Open(archivePath))
                     {
                         var entry = archive.Entries.FirstOrDefault(e => e.Key != null && e.Key.Replace("\\", "/") == entryPath.Replace("\\", "/"));
@@ -68,7 +66,6 @@ namespace WpfIndexer.Views
                 // Durum 2: Normal dosya
                 if (File.Exists(path))
                 {
-                    // Dosyayı varsayılan uygulama ile aç
                     Process.Start(new ProcessStartInfo(path)
                     {
                         UseShellExecute = true
@@ -85,14 +82,22 @@ namespace WpfIndexer.Views
             }
         }
 
-        // --- ARAMA ÖNERİLERİ İÇİN EVENT HANDLER'LAR ---
-
         private void Suggestion_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (sender is ListBoxItem item && DataContext is MainViewModel vm)
             {
                 vm.SelectSuggestionCommand.Execute(item.DataContext);
-                SearchTextBox.Focus();
+
+                // YENİ: Hangi arama kutusunun (öncesi/sonrası) aktif olduğuna
+                // IsSearchPerformed durumuna göre karar ver
+                if (vm.IsSearchPerformed)
+                {
+                    SearchTextBoxPost.Focus(); // Arama sonrası kutusu
+                }
+                else
+                {
+                    SearchTextBoxPre.Focus(); // Arama öncesi (merkezi) kutu
+                }
             }
         }
 
@@ -101,7 +106,17 @@ namespace WpfIndexer.Views
             if (e.Key == Key.Enter && sender is ListBoxItem item && DataContext is MainViewModel vm)
             {
                 vm.SelectSuggestionCommand.Execute(item.DataContext);
-                SearchTextBox.Focus();
+
+                // YENİ: Hangi arama kutusunun (öncesi/sonrası) aktif olduğuna
+                // IsSearchPerformed durumuna göre karar ver
+                if (vm.IsSearchPerformed)
+                {
+                    SearchTextBoxPost.Focus(); // Arama sonrası kutusu
+                }
+                else
+                {
+                    SearchTextBoxPre.Focus(); // Arama öncesi (merkezi) kutu
+                }
             }
         }
     }

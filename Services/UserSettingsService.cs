@@ -1,7 +1,10 @@
-﻿using System;
+﻿using Newtonsoft.Json;
+using System;
 using System.IO;
-using Newtonsoft.Json;
 using WpfIndexer.Models;
+
+// DÜZELTME: Bu satır, iç içe namespace hatasından kaynaklanıyordu. Kaldırıldı.
+// using WpfIndexer.Models.WpfIndexer.Models;
 
 namespace WpfIndexer.Services
 {

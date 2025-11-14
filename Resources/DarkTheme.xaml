@@ -3,21 +3,11 @@
 
     <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
-    <!-- 
-    ******************************************************************
-    RENK TANIMLARI BÖLÜMÜ
-    ******************************************************************
-    -->
-
-    <!-- Ana Renkler -->
     <Color x:Key="BrandBlueColor" A="255" R="73" G="138" B="244" />
-    <!-- #498af4 -->
     <Color x:Key="BrandBlueHoverColor" A="255" R="106" G="169" B="247" />
-    <!-- #6aa9f7 -->
     <SolidColorBrush x:Key="BrandBlueBrush" Color="{StaticResource BrandBlueColor}"/>
     <SolidColorBrush x:Key="BrandBlueHoverBrush" Color="{StaticResource BrandBlueHoverColor}"/>
 
-    <!-- Genel UI Renkleri -->
     <SolidColorBrush x:Key="WindowBackgroundColor" Color="#FF252526"/>
     <SolidColorBrush x:Key="TextColor" Color="#FFF1F1F1"/>
     <SolidColorBrush x:Key="GrayTextColor" Color="#FF999999"/>
@@ -26,7 +16,6 @@
     <SolidColorBrush x:Key="DisabledBorderColor" Color="#FF505050"/>
     <SolidColorBrush x:Key="DisabledForegroundColor" Color="#FF707070"/>
 
-    <!-- Kontrol Renkleri -->
     <SolidColorBrush x:Key="ControlBackgroundColor" Color="#FF2D2D30"/>
     <SolidColorBrush x:Key="ControlBorderColor" Color="#FF505050"/>
     <SolidColorBrush x:Key="TextBoxBackgroundColor" Color="#FF3C3C3E"/>
@@ -35,21 +24,16 @@
     <SolidColorBrush x:Key="MenuBackgroundColor" Color="#FF2D2D30"/>
     <SolidColorBrush x:Key="MenuPopupBorderColor" Color="#FF434346"/>
 
-    <!-- DÜZELTME: Menü ve Başlıklar için yeni HOVER renkleri (Artık mavi değil) -->
     <Color x:Key="HighlightColor"  A="255" R="73" G="138" B="244" />
-    <!-- #3E3E42 (Koyu Gri) -->
     <Color x:Key="HighlightTextColor" A="255" R="255" G="255" B="255" />
-    <!-- White -->
     <SolidColorBrush x:Key="MenuItemHoverBackgroundColor" Color="{StaticResource HighlightColor}"/>
     <SolidColorBrush x:Key="MenuItemHoverTextColor" Color="{StaticResource HighlightTextColor}"/>
     <StaticResource x:Key="HeaderHoverBackgroundColor" ResourceKey="MenuItemHoverBackgroundColor"/>
     <StaticResource x:Key="HeaderHoverTextColor" ResourceKey="MenuItemHoverTextColor"/>
 
-    <!-- 
-    ******************************************************************
-    ANAHTARLI (KEYED) STİLLER
-    ******************************************************************
-    -->
+    <SolidColorBrush x:Key="HighlightBackgroundBrush" Color="Yellow"/>
+    <SolidColorBrush x:Key="HighlightForegroundBrush" Color="Black"/>
+
     <Style x:Key="BrandButton" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource BrandBlueBrush}"/>
         <Setter Property="Foreground" Value="White"/>
@@ -85,7 +69,6 @@
         <Setter Property="BorderBrush" Value="{StaticResource BrandBlueBrush}"/>
         <Setter Property="Margin" Value="2"/>
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-        <!-- ToolTip buradan kaldırıldı (Hata CS0161) -->
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="CheckBox">
@@ -102,7 +85,7 @@
                             </Grid>
                         </BulletDecorator.Bullet>
                         <ContentPresenter Margin="5,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Left"
-                                          RecognizesAccessKey="True"/>
+                                           RecognizesAccessKey="True"/>
                     </BulletDecorator>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
@@ -142,11 +125,6 @@
         </Setter>
     </Style>
 
-    <!-- 
-    ******************************************************************
-    TÜM KONTROLLER İÇİN VARSAYILAN (IMPLICIT) STİLLER
-    ******************************************************************
-    -->
     <Style TargetType="{x:Type Window}">
         <Setter Property="Background" Value="{DynamicResource WindowBackgroundColor}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
@@ -273,9 +251,7 @@
         <Setter Property="Foreground" Value="{DynamicResource TextColor}" />
         <Setter Property="BorderBrush" Value="{DynamicResource MenuPopupBorderColor}" />
         <Setter Property="BorderThickness" Value="0"/>
-        <!-- Bonus -->
         <Setter Property="SnapsToDevicePixels" Value="True"/>
-        <!-- Bonus -->
         <Setter Property="Padding" Value="6,3,6,3"/>
         <Setter Property="HorizontalContentAlignment" Value="Left"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -340,7 +316,6 @@
         </Setter>
     </Style>
 
-    <!-- DÜZELTME: "Beyaz çizgi" sorununu çözen Separator stili -->
     <Style TargetType="{x:Type Separator}">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Height" Value="0"/>

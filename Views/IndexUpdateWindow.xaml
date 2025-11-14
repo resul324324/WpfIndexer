@@ -29,7 +29,7 @@
             <TextBlock Text="İndeks Adı:" FontWeight="SemiBold"/>
             <TextBox Text="{Binding IndexName, Mode=OneWay}" IsReadOnly="True" />
 
-            <TextBlock Text="Kaynak Klasör:" FontWeight="SemiBold" Margin="0,8,0,0"/>
+            <TextBlock Text="İndeklenecek Klasör:" FontWeight="SemiBold" Margin="0,8,0,0"/>
             <TextBox Text="{Binding SourcePath, Mode=OneWay}" IsReadOnly="True" />
 
             <TextBlock Text="OCR Kalitesi:" FontWeight="SemiBold" Margin="0,8,0,0"/>
@@ -59,7 +59,7 @@
                                  IsChecked="{Binding Path=SelectedOcrQuality, ConverterParameter={x:Static models:OcrQuality.High}, Converter={StaticResource EnumToBooleanConverter}}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="Yüksek (Yavaş)" FontWeight="SemiBold"/>
-                            <TextBlock Text=" - ('Best' modelleri kullanır, en yüksek doğruluk)" Foreground="DarkRed" Margin="5,0,0,0"/>
+                            <TextBlock Text=" - ('En iyi' modelleri kullanır, en yüksek doğruluk)" Foreground="DarkRed" Margin="5,0,0,0"/>
                         </StackPanel>
                     </RadioButton>
                 </StackPanel>

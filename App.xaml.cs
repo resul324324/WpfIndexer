@@ -147,12 +147,19 @@ namespace WpfIndexer
             services.AddSingleton<SearchHistoryService>();
             services.AddSingleton<ThemeService>();
             services.AddSingleton<CsvExportService>();
+
+            // --- ViewModel Kayıtları ---
             services.AddSingleton<MainViewModel>();
             services.AddTransient<IndexManagementViewModel>();
-            services.AddTransient<SettingsViewModel>();
-            services.AddTransient<IndexCreationViewModel>();
-            services.AddSingleton<MainWindow>(provider =>
 
+            // ***** DEĞİŞİKLİK 1: SettingsViewModel artık Singleton olmalı *****
+            // (Hem SettingsWindow hem de ViewSettingsWindow aynı ayarları paylaşmalı)
+            services.AddSingleton<SettingsViewModel>();
+
+            services.AddTransient<IndexCreationViewModel>();
+
+            // --- View (Pencere) Kayıtları ---
+            services.AddSingleton<MainWindow>(provider =>
             {
                 var vm = provider.GetRequiredService<MainViewModel>();
                 return new MainWindow { DataContext = vm };
@@ -164,14 +171,28 @@ namespace WpfIndexer
             });
             services.AddTransient<SettingsWindow>(provider =>
             {
+                // Singleton olarak kaydettiğimiz SettingsViewModel'i al
                 var vm = provider.GetRequiredService<SettingsViewModel>();
-                return new SettingsWindow { DataContext = vm };
+                // DataContext'e ata
+                return new SettingsWindow(vm); // Constructor'a VM'i geç
             });
             services.AddTransient<IndexCreationWindow>(provider =>
             {
                 var vm = provider.GetRequiredService<IndexCreationViewModel>();
                 return new IndexCreationWindow { ViewModel = vm };
             });
+
+            // ***** DEĞİŞİKLİK 2: Eksik pencereleri ekle *****
+            services.AddTransient<ViewSettingsWindow>(provider =>
+            {
+                // Singleton olarak kaydettiğimiz SettingsViewModel'i al
+                var vm = provider.GetRequiredService<SettingsViewModel>();
+                // DataContext'e ata
+                return new ViewSettingsWindow(vm); // Constructor'a VM'i geç
+            });
+
+            services.AddTransient<SelectFileTypesWindow>(); // Bu da diğer VM'ler tarafından kullanılıyordu
+
             services.AddTransient<HelpWindow>();
             services.AddTransient<AboutWindow>();
         }

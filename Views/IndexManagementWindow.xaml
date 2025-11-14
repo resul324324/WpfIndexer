@@ -66,14 +66,14 @@
             <Button Content="Yeni İndeks Oluştur" 
                     Style="{StaticResource BrandButton}"
                     Command="{Binding CreateIndexCommand}" Width="135" Margin="10,4,10,4" />
-            <Button Content="Mevcut İndeksi Ekle..." 
+            <Button Content="Mevcut İndeksi Ekle" 
                     Style="{StaticResource BrandButton}"
                     Command="{Binding AddExistingIndexCommand}" Margin="10,4,10,4" Width="135" />
-            <Button Content="Seçilileri Güncelle" 
+            <Button Content="Güncelle" 
                     Style="{StaticResource BrandButton}"
                     Command="{Binding UpdateIndexCommand}"
                     ToolTip="Seçili (tick) olan ve kaynak yolu bilinen indeksleri günceller" Margin="10,4,10,4" Width="135"/>
-            <Button Content="Seçilileri Kaldır" 
+            <Button Content="Sil" 
                     Style="{StaticResource BrandButton}"
                     Command="{Binding DeleteIndexCommand}"
                     ToolTip="Seçili (tick) olan indeksleri listeden kaldırır" Margin="10,4,10,4" Width="135"/>

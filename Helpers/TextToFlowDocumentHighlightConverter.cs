@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Globalization;
+using System.Windows; // YENİ
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Media;
@@ -13,10 +14,9 @@ namespace WpfIndexer.Helpers
         private const string HighlightStartTag = "<B>";
         private const string HighlightEndTag = "</B>";
 
-        // Vurgu renkleri. Bunları tema (ResourceDictionary) 
-        // üzerinden de alabilirsiniz, ama şimdilik sabit kalsın.
-        private static readonly SolidColorBrush HighlightBackground = Brushes.Yellow;
-        private static readonly SolidColorBrush HighlightForeground = Brushes.Black;
+        // KALDIRILDI: Vurgu renkleri kaldırıldı, artık XAML'dan geliyor.
+        // private static readonly SolidColorBrush HighlightBackground = Brushes.Yellow;
+        // private static readonly SolidColorBrush HighlightForeground = Brushes.Black;
 
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
@@ -77,9 +77,10 @@ namespace WpfIndexer.Helpers
                     // 5. Vurgulu metni ekle
                     para.Inlines.Add(new Run(highlightedText)
                     {
-                        Background = HighlightBackground,
+                        // YENİ: Renkleri XAML'dan dinamik olarak al
+                        Background = (Brush)Application.Current.FindResource("HighlightBackgroundBrush"),
                         FontWeight = System.Windows.FontWeights.Bold,
-                        Foreground = HighlightForeground
+                        Foreground = (Brush)Application.Current.FindResource("HighlightForegroundBrush")
                     });
 
                     // 6. İndeksi güncelle

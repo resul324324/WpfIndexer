@@ -7,104 +7,79 @@
         xmlns:models="clr-namespace:WpfIndexer.Models"
         xmlns:helpers="clr-namespace:WpfIndexer.Helpers"
         mc:Ignorable="d"
-        Title="Ayarlar" Height="548" Width="450"
+        Title="Ayarlar" Height="460" Width="450"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         Background="{DynamicResource WindowBackgroundColor}"
         Foreground="{DynamicResource TextColor}">
-  <Window.Resources>
-    <helpers:EnumToBooleanConverter x:Key="EnumToBooleanConverter"/>
-    <!-- Projenizde bu converter yoksa, BooleanToVisibilityConverter gibi
-             BoolToOnOffConverter adında bir IValueConverter oluşturmanız gerekebilir.
-             Şimdilik, bu olmasa da CheckBox çalışacaktır. -->
-  </Window.Resources>
 
-  <Grid Margin="15">
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/>
-      <RowDefinition Height="*"/>
-      <RowDefinition Height="Auto"/>
-    </Grid.RowDefinitions>
+    <Window.Resources>
+        <helpers:EnumToBooleanConverter x:Key="EnumToBooleanConverter"/>
+    </Window.Resources>
 
-    <TextBlock Grid.Row="0" Text="Uygulama Ayarları" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
-    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-      <StackPanel>
-        <TextBlock Text="Genel Ayarlar" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,5"/>
-        <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="10" CornerRadius="4">
-          <StackPanel>
-            <!-- ... (Mevcut Tema ve Önizleme ayarları burada) ... -->
-            <TextBlock Text="Uygulama Teması:"/>
-            <RadioButton Content="Açık" GroupName="Theme" Margin="0,5,0,0"
-                         IsChecked="{Binding Path=Settings.Theme, ConverterParameter={x:Static models:AppTheme.Light}, Converter={StaticResource EnumToBooleanConverter}}"/>
-            <RadioButton Content="Koyu" GroupName="Theme" Margin="0,5,0,0"
-                         IsChecked="{Binding Path=Settings.Theme, ConverterParameter={x:Static models:AppTheme.Dark}, Converter={StaticResource EnumToBooleanConverter}}"/>
-            <RadioButton Content="Sistem Varsayılanı" GroupName="Theme" Margin="0,5,0,0" IsEnabled="False"
-                         IsChecked="{Binding Path=Settings.Theme, ConverterParameter={x:Static models:AppTheme.SystemDefault}, Converter={StaticResource EnumToBooleanConverter}}"/>
+        <!-- Başlık -->
+        <TextBlock Grid.Row="0" Text="Uygulama Ayarları"
+                   FontSize="18" FontWeight="Bold"
+                   Margin="0,0,0,10"/>
 
-            <CheckBox Content="Ana Pencerede Önizleme Panelini Göster" Margin="0,10,0,0"
-                      IsChecked="{Binding Settings.EnablePreview}"/>
-                        <StackPanel Margin="20,10,0,0" 
-            IsEnabled="{Binding Settings.EnablePreview}">
+        <!-- İçerik + Butonlar -->
+        <StackPanel Grid.Row="1" Margin="0,0,0,10">
+            <!-- Arama Ayarları -->
+            <TextBlock Text="Arama Ayarları" FontWeight="SemiBold" FontSize="14" Margin="0,10,0,5"/>
+            <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="10" CornerRadius="4">
+                <StackPanel>
+                    <CheckBox Content="Arama Geçmişini Kaydet"
+                              IsChecked="{Binding Settings.SaveSearchHistory}"/>
+                    <CheckBox Content="Arama Önerilerini Göster (Geçmişe göre)"
+                              Margin="2,5,0,0"
+                              IsChecked="{Binding Settings.ShowSearchSuggestions}"/>
+                    <TextBlock Text="Varsayılan Arama Sonuç Limiti:" Margin="0,10,0,5"/>
+                    <TextBox Text="{Binding Settings.DefaultSearchResultLimit}"
+                             Width="100" HorizontalAlignment="Left"/>
+                    <Button Content="Arama Geçmişini Şimdi Temizle"
+                            Style="{StaticResource BrandButton}"
+                            Command="{Binding ClearSearchHistoryCommand}"
+                            Margin="0,15,0,0"
+                            HorizontalAlignment="Left"
+                            Width="200" Height="26"/>
+                </StackPanel>
+            </Border>
 
-                            <TextBlock Text="Önizleme Modu:" FontWeight="Bold" Margin="0,0,0,5"/>
+            <!-- Gelişmiş Ayarlar -->
+            <TextBlock Text="Gelişmiş Ayarlar" FontWeight="SemiBold" FontSize="14" Margin="0,15,0,5"/>
+            <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="10" CornerRadius="4">
+                <StackPanel>
+                    <CheckBox Content="Detaylı (Verbose) Loglamayı Etkinleştir"
+                              ToolTip="Hata ayıklama için daha fazla sistem detayı kaydeder. 'system.log' dosyasını büyütür."
+                              IsChecked="{Binding Settings.EnableVerboseLogging}"/>
+                    <CheckBox Content="Otomatik İndeks Güncellemeyi Etkinleştir"
+                              ToolTip="Uygulama başladığında ve kaynak klasörlerde değişiklik olduğunda indeksleri arka planda sessizce günceller."
+                              IsChecked="{Binding Settings.AutoUpdateEnabled}"
+                              Margin="2,5,0,0"/>
+                </StackPanel>
+            </Border>
 
-                            <RadioButton Content="Rapor Modu (Hızlı, vurgulamalı düz metin)"
-                 GroupName="PreviewMode"
-                 IsChecked="{Binding Settings.PreviewMode, 
-                             Converter={StaticResource EnumToBooleanConverter}, 
-                             ConverterParameter=Rapor}"/>
+            <!-- Butonlar -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+                <Button Content="Kaydet ve Kapat"
+                        Style="{StaticResource BrandButton}"
+                        IsDefault="True"
+                        Command="{Binding SaveAndCloseCommand}"
+                        CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"
+                        Width="120" Height="26" Margin="0,0,8,0"/>
+                <Button Content="İptal"
+                        Style="{StaticResource BrandButton}"
+                        IsCancel="True"
+                        Width="120" Height="26"/>
+            </StackPanel>
+        </StackPanel>
 
-                            <RadioButton Content="Canlı Mod (Yüksek kaliteli, vurgusuz orijinal görünüm)"
-                 GroupName="PreviewMode"
-                 Margin="0,5,0,0"
-                 IsChecked="{Binding Settings.PreviewMode, 
-                             Converter={StaticResource EnumToBooleanConverter}, 
-                             ConverterParameter=Canli}"/>
-                        </StackPanel>
-                    </StackPanel>
-        </Border>
-
-        <TextBlock Text="Arama Ayarları" FontWeight="SemiBold" FontSize="14" Margin="0,15,0,5"/>
-        <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="10" CornerRadius="4">
-          <StackPanel>
-            <!-- ... (Mevcut Arama Ayarları burada) ... -->
-            <CheckBox Content="Arama Geçmişini Kaydet"
-                      IsChecked="{Binding Settings.SaveSearchHistory}"/>
-            <CheckBox Content="Arama Önerilerini Göster (Geçmişe göre)" Margin="0,5,0,0"
-                      IsChecked="{Binding Settings.ShowSearchSuggestions}"/>
-            <TextBlock Text="Varsayılan Arama Sonuç Limiti:" Margin="0,10,0,0"/>
-            <TextBox Text="{Binding Settings.DefaultSearchResultLimit}" Width="100" HorizontalAlignment="Left"/>
-            <Button Content="Arama Geçmişini Şimdi Temizle" Style="{StaticResource BrandButton}"
-                    Command="{Binding ClearSearchHistoryCommand}" Margin="0,15,0,0" HorizontalAlignment="Left"/>
-          </StackPanel>
-        </Border>
-
-        <TextBlock Text="Gelişmiş Ayarlar" FontWeight="SemiBold" FontSize="14" Margin="0,15,0,5"/>
-        <Border BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="10" CornerRadius="4">
-          <StackPanel>
-            <CheckBox Content="Detaylı (Verbose) Loglamayı Etkinleştir"
-                      ToolTip="Hata ayıklama için daha fazla sistem detayı kaydeder. 'system.log' dosyasını büyütür."
-                      IsChecked="{Binding Settings.EnableVerboseLogging}"/>
-
-            <!-- YENİ: OTOMATİK GÜNCELLEME SEÇENEĞİ -->
-            <CheckBox Content="Otomatik İndeks Güncellemeyi Etkinleştir"
-                      ToolTip="Uygulama başladığında ve kaynak klasörlerde değişiklik olduğunda indeksleri arka planda sessizce günceller."
-                      IsChecked="{Binding Settings.AutoUpdateEnabled}"
-                      Margin="0,5,0,0"/>
-            <!-- YENİ BİTİŞ -->
-
-          </StackPanel>
-        </Border>
-
-      </StackPanel>
-    </ScrollViewer>
-
-    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
-      <Button Content="Kaydet ve Kapat" Style="{StaticResource BrandButton}" IsDefault="True"
-              Command="{Binding SaveAndCloseCommand}"
-              CommandParameter="{Binding RelativeSource={RelativeSource AncestorType=Window}}"
-              MinWidth="140"/>
-      <Button Content="İptal" Style="{StaticResource BrandButton}" IsCancel="True" MinWidth="100" Margin="10,0,0,0"/>
-    </StackPanel>
-  </Grid>
+        <!-- ScrollViewer kaldırıldı, içerik zaten sığacak şekilde optimize edildi -->
+    </Grid>
 </Window>

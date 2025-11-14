@@ -33,7 +33,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <TextBlock Text="Kaynak Klasör:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBlock Text="İndekslenen Klasör:" VerticalAlignment="Center" Margin="0,0,8,0"/>
             <TextBox Grid.Column="1" Text="{Binding SourcePath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,0,8,0"/>
             <Button Grid.Column="2" Content="Gözat..." Width="80" Command="{Binding BrowseSourceCommand}" Style="{StaticResource BrandButton}"/>
         </Grid>
@@ -46,7 +46,7 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <TextBlock Text="İndeks Kök:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBlock Text="İndeks Yolu:" VerticalAlignment="Center" Margin="0,0,8,0"/>
             <TextBox Grid.Column="1" Text="{Binding IndexPath, UpdateSourceTrigger=PropertyChanged}" VerticalAlignment="Center" Margin="0,0,8,0"/>
             <Button Grid.Column="2" Content="Gözat..." Width="80" Command="{Binding BrowseIndexCommand}" Style="{StaticResource BrandButton}"/>
         </Grid>

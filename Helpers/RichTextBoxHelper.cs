@@ -37,10 +37,14 @@ namespace WpfIndexer.Helpers
             // Aranan kelimeye odaklanma mantığı
             rtb.Dispatcher.BeginInvoke(() =>
             {
+                // YENİ: Vurgu fırçasını dinamik olarak temadan al
+                var highlightBrush = (Brush)rtb.FindResource("HighlightBackgroundBrush");
+
                 var firstMatch = doc.Blocks
                     .OfType<Paragraph>()
                     .SelectMany(p => p.Inlines.OfType<Run>())
-                    .FirstOrDefault(run => run.Background == Brushes.Yellow);
+                    // ESKİ: .FirstOrDefault(run => run.Background == Brushes.Yellow);
+                    .FirstOrDefault(run => run.Background == highlightBrush); // YENİ
 
                 if (firstMatch != null)
                 {

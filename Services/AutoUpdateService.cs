@@ -34,8 +34,8 @@ namespace WpfIndexer.Services
         private string _lastStatusMessage = "";
 
         // Not: Sizin 3000ms (3sn) ve 6000ms (6sn) ayarlarınızı koruyorum.
-        private const int StartupDelay = 30000;      // 30 saniye
-        private const int DebouncePeriod = 600000;    // 600 saniye
+        private const int StartupDelay = 10000;     // 10 saniye
+        private const int DebouncePeriod = 500000;   // 500 saniye
 
         public AutoUpdateService(
             IIndexService indexService,

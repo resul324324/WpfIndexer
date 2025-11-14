@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
+// Dosyanın tamamı WpfIndexer.Models isim alanı içinde olmalı
 namespace WpfIndexer.Models
 {
     public enum AppTheme
@@ -15,9 +16,16 @@ namespace WpfIndexer.Models
         Canli  // Gerçek dosya görünümü (yeni sistem)
     }
 
+    // DÜZELTME: Enum'u buraya, ana namespace'e taşıdım.
+    // İç içe olan "WpfIndexer.Models.WpfIndexer.Models" hatası düzeltildi.
+    public enum PreviewPanePosition
+    {
+        Right,
+        Bottom
+    }
+
     public class UserSettings : INotifyPropertyChanged
     {
-
         private AppTheme _theme = AppTheme.Light;
         public AppTheme Theme
         {
@@ -30,11 +38,9 @@ namespace WpfIndexer.Models
             get => _previewMode;
             set
             {
-                
                 if (_previewMode != value)
                 {
                     _previewMode = value;
-                   
                     OnPropertyChanged(nameof(PreviewMode));
                 }
             }
@@ -73,6 +79,14 @@ namespace WpfIndexer.Models
         {
             get => _enableVerboseLogging;
             set { _enableVerboseLogging = value; OnPropertyChanged(); }
+        }
+
+        // YENİ: İstenen yeni özellik buraya eklendi.
+        private PreviewPanePosition _previewPosition = PreviewPanePosition.Right;
+        public PreviewPanePosition PreviewPosition
+        {
+            get => _previewPosition;
+            set { _previewPosition = value; OnPropertyChanged(); }
         }
 
 

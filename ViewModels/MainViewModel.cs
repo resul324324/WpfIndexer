@@ -37,6 +37,9 @@ using OpenXmlPowerTools;
 using DocumentFormat.OpenXml.Packaging;
 using ClosedXML.Excel;
 
+// DÜZELTME: 'Theme' enum'unun bulunduğu namespace'i ekliyoruz.
+using WpfIndexer.Services;
+
 [assembly: System.Runtime.Versioning.SupportedOSPlatform("windows")]
 
 namespace WpfIndexer.ViewModels
@@ -73,6 +76,13 @@ namespace WpfIndexer.ViewModels
                 _ = UpdateSuggestionsAsync(value);
             }
         }
+        // YENİ: Arayüzün durumunu (arama öncesi/sonrası) belirler
+        private bool _isSearchPerformed;
+        public bool IsSearchPerformed
+        {
+            get => _isSearchPerformed;
+            set { _isSearchPerformed = value; OnPropertyChanged(); }
+        }
         public ObservableCollection<string> Suggestions { get; } = new();
         private bool _isSuggestionsOpen;
         public bool IsSuggestionsOpen
@@ -88,8 +98,6 @@ namespace WpfIndexer.ViewModels
             {
                 _selectedSearchResult = value;
                 OnPropertyChanged();
-                _ = LoadPreviewAsync();
-                (OpenFileLocationCommand as RelayCommand)?.RaiseCanExecuteChanged();
             }
         }
         private string _statusMessage = "Hazır.";
@@ -129,10 +137,10 @@ namespace WpfIndexer.ViewModels
         }
 
         // Görünürlük Özellikleri
-        public Visibility TextPreviewVisibility => UserSettings.EnablePreview &&
-                                                  UserSettings.PreviewMode == PreviewMode.Rapor &&
-                                                  _selectedPreviewContent.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        // MainViewModel.cs (Satır 137-140)
 
+        public Visibility TextPreviewVisibility => UserSettings.EnablePreview &&
+                                                  _selectedPreviewContent.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
         public Visibility ImagePreviewVisibility => UserSettings.EnablePreview && _selectedPreviewImagePath != null ? Visibility.Visible : Visibility.Collapsed;
 
         private Visibility _videoPreviewVisibility = Visibility.Collapsed;
@@ -143,10 +151,24 @@ namespace WpfIndexer.ViewModels
             get
             {
                 if (!UserSettings.EnablePreview) return Visibility.Visible;
-                if (TextPreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
-                if (ImagePreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
+
+                // DÜZELTME: 'PreviewMode' kontrolü kaldırıldı.
+                // Eğer metin içeriği yüklendiyse (_selectedPreviewContent > 0),
+                // bu panel her zaman gizlenmelidir.
+                if (UserSettings.EnablePreview &&
+                    _selectedPreviewContent.Length > 0)
+                {
+                    return Visibility.Collapsed;
+                }
+
+                if (UserSettings.EnablePreview && _selectedPreviewImagePath != null)
+                {
+                    return Visibility.Collapsed;
+                }
+
                 if (VideoPreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
                 if (WebViewPreviewVisibility == Visibility.Visible) return Visibility.Collapsed;
+
                 return Visibility.Visible;
             }
         }
@@ -173,6 +195,7 @@ namespace WpfIndexer.ViewModels
         public ICommand OpenSearchLogCommand { get; }
         public ICommand ExportResultsCommand { get; }
         public ICommand ExitApplicationCommand { get; }
+        public ICommand OpenViewSettingsCommand { get; }
 
         // Constructor
         public MainViewModel(
@@ -193,6 +216,7 @@ namespace WpfIndexer.ViewModels
             _csvExportService = csvExportService;
             _logger = logger;
             _searchLogger = searchLogger;
+            IsSearchPerformed = false;
 
             // Komut tanımlamaları
             SearchCommand = new RelayCommand(async _ => await SearchAsync(), _ => !string.IsNullOrWhiteSpace(Query));
@@ -206,6 +230,7 @@ namespace WpfIndexer.ViewModels
             OpenSearchLogCommand = new RelayCommand(_ => OpenLogFile("arama.log"));
             ExportResultsCommand = new RelayCommand(_ => ExportResults(), _ => SearchResults.Any());
             ExitApplicationCommand = new RelayCommand(_ => Application.Current.Shutdown());
+            OpenViewSettingsCommand = new RelayCommand(_ => OpenWindow<ViewSettingsWindow>());
 
             _autoUpdateService.StatusChanged += (status) =>
             {
@@ -236,18 +261,21 @@ namespace WpfIndexer.ViewModels
         // Ayar değişikliklerini dinle
         private void OnSettingsChanged(object? sender, PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(UserSettings.EnablePreview))
+            if (e.PropertyName == nameof(UserSettings.EnablePreview) ||
+        e.PropertyName == nameof(UserSettings.PreviewPosition))
             {
                 OnPropertyChanged(nameof(TextPreviewVisibility));
                 OnPropertyChanged(nameof(ImagePreviewVisibility));
                 OnPropertyChanged(nameof(VideoPreviewVisibility));
+                OnPropertyChanged(nameof(WebViewPreviewVisibility));
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                 OnPropertyChanged(nameof(UnsupportedMessage));
+                OnPropertyChanged(nameof(UserSettings));
             }
 
-            if (e.PropertyName == nameof(UserSettings.PreviewMode))
+            if (e.PropertyName == nameof(UserSettings.PreviewMode) || e.PropertyName == nameof(UserSettings.Theme))
             {
-                _ = LoadPreviewAsync();
+                _ = LoadPreviewAsyncWithToken();
             }
         }
 
@@ -263,6 +291,12 @@ namespace WpfIndexer.ViewModels
         private async Task SearchAsync()
         {
             if (string.IsNullOrWhiteSpace(Query)) return;
+
+            // YENİ: Arama yapıldığında arayüzü "arama sonrası" durumuna geçir
+            if (!IsSearchPerformed)
+            {
+                IsSearchPerformed = true;
+            }
 
             IsSuggestionsOpen = false;
             StatusMessage = "Aranıyor...";
@@ -482,97 +516,183 @@ namespace WpfIndexer.ViewModels
         // --- ÖNİZLEME (PREVIEW) MANTIĞI ---
         // -------------------------------------------------------------------
 
-        private async Task LoadPreviewAsync()
-        {
-            _previewCts?.Cancel();
-            _previewCts = new CancellationTokenSource();
-            var token = _previewCts.Token;
+        // -------------------------------------------------------------------
+        // --- ÖNİZLEME (PREVIEW) MANTIĞI - GÜNCELLENMİŞ ---
+        // -------------------------------------------------------------------
 
+        // -------------------------------------------------------------------
+        // --- ÖNİZLEME (PREVIEW) MANTIĞI - GÜNCELLENMİŞ ---
+        // -------------------------------------------------------------------
+
+        // -------------------------------------------------------------------
+        // --- ÖNİZLEME (PREVIEW) MANTIĞI - GÜNCELLENMİŞ ---
+        // -------------------------------------------------------------------
+
+        private async Task LoadPreviewAsyncWithToken()
+        {
+            // Eski görevi iptal et
+            _previewCts?.Cancel();
+            var cts = new CancellationTokenSource();
+            _previewCts = cts;
+            var token = cts.Token;
+
+            var currentSelection = SelectedSearchResult;
+
+            // --- 1. AŞAMA: UI'ı sıfırla ---
+
+            // WebView2'yi gizle (ama Source'u null yapma!)
+            WebViewPreviewVisibility = Visibility.Collapsed;
+
+            // Diğer önizleme içeriklerini temizle
             SelectedPreviewVideoPath = null;
             SelectedPreviewImagePath = null;
             SelectedPreviewContent = string.Empty;
-            SelectedPreviewWebViewUri = null;
-            WebViewPreviewVisibility = Visibility.Collapsed;
+            HighlightedPreviewContent = string.Empty;
 
-            if (SelectedSearchResult == null)
+            // Görünürlük değişikliklerini bildir
+            OnPropertyChanged(nameof(ImagePreviewVisibility));
+            OnPropertyChanged(nameof(TextPreviewVisibility));
+            OnPropertyChanged(nameof(VideoPreviewVisibility));
+            OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+
+            if (currentSelection == null)
             {
                 UnsupportedMessage = "Önizleme için bir dosya seçin.";
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                 return;
             }
 
-            var path = SelectedSearchResult.Path;
-            var ext = SelectedSearchResult.Extension.ToLowerInvariant();
+            UnsupportedMessage = "Önizleme yükleniyor...";
+            OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
 
-            if (path.Contains("|"))
-            {
-                UnsupportedMessage = $"'{Path.GetFileName(path)}' bir arşivin (ZIP, RAR vb.) içindedir.\n\nÖnizleme şu anda arşiv içi dosyalar için desteklenmemektedir.";
-                OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                return;
-            }
-
-            if (!System.IO.File.Exists(path))
-            {
-                UnsupportedMessage = $"Dosya bulunamadı: {path}";
-                OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                return;
-            }
-
+            // UI'ın güncellenmesi için kısa bekleme
             try
             {
-                // Resim/Video (Her iki modda da ortak)
-                if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".gif" || ext == ".tiff" || ext == ".webp")
+                await Task.Delay(30, token);
+            }
+            catch (TaskCanceledException)
+            {
+                return;
+            }
+
+            if (token.IsCancellationRequested) return;
+
+            // --- 2. AŞAMA: Gerçek yüklemeyi yap ---
+            try
+            {
+                var path = currentSelection.Path;
+                var ext = currentSelection.Extension.ToLowerInvariant();
+
+                if (path.Contains("|"))
                 {
-                    SelectedPreviewImagePath = path;
-                    OnPropertyChanged(nameof(ImagePreviewVisibility));
+                    if (token.IsCancellationRequested) return;
+                    UnsupportedMessage = $"'{Path.GetFileName(path)}' bir arşivin (ZIP, RAR vb.) içindedir.\n\nÖnizleme şu anda arşiv içi dosyalar için desteklenmemektedir.";
+                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                     return;
                 }
+
+                if (!System.IO.File.Exists(path))
+                {
+                    if (token.IsCancellationRequested) return;
+                    UnsupportedMessage = $"Dosya bulunamadı: {path}";
+                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+                    return;
+                }
+
+                // Resim/Video (Hızlı)
+                if (ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".gif" || ext == ".tiff" || ext == ".webp")
+                {
+                    if (token.IsCancellationRequested) return;
+                    SelectedPreviewImagePath = path;
+                    OnPropertyChanged(nameof(ImagePreviewVisibility));
+                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+                    return;
+                }
+
                 if (ext == ".mp4" || ext == ".wmv" || ext == ".avi" || ext == ".mkv" || ext == ".mov" || ext == ".mpeg" || ext == ".webm")
                 {
                     string thumb = await Task.Run(() => FileProcessor.ExtractVideoThumbnail(path));
+                    if (token.IsCancellationRequested) return;
 
                     if (System.IO.File.Exists(thumb))
                     {
                         SelectedPreviewImagePath = thumb;
                         OnPropertyChanged(nameof(ImagePreviewVisibility));
+                        OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                         return;
                     }
                 }
 
                 bool livePreviewSuccessful = false;
+                bool autoFallbackToReportMode = false;
 
-                // ********* ÖNCE CANLI MODU DENE *********
+                // ********* CANLI MOD (HTML/WebView) *********
                 if (UserSettings.EnablePreview && UserSettings.PreviewMode == PreviewMode.Canli)
                 {
-                    // WebView2'nin doğrudan açabildiği dosyalar (PDF, TXT, vb.)
-                    if (ext == ".pdf" || ext == ".txt" || ext == ".log" || ext == ".xml" || ext == ".json" || ext == ".cs" || ext == ".html" || ext == ".css")
-                    {
-                        SelectedPreviewWebViewUri = new Uri(path);
-                        WebViewPreviewVisibility = Visibility.Visible;
-                        livePreviewSuccessful = true;
-                    }
-                    // HTML'e DÖNÜŞÜM GEREKEN dosyalar (DOCX, XLSX, CSV)
-                    else if (ext == ".docx" || ext == ".xlsx" || ext == ".csv")
-                    {
-                        StatusMessage = "Canlı önizleme için dosya dönüştürülüyor...";
-                        string? htmlPath = await ConvertFileToHtmlAsync(path, ext, Query, token);
-                        StatusMessage = "Hazır.";
+                    bool canliDestekli = ext is ".pdf" or ".txt" or ".log" or ".xml" or ".json" or ".cs" or ".html" or ".css" or ".docx" or ".xlsx" or ".csv";
 
-                        if (token.IsCancellationRequested) return;
-
-                        if (htmlPath != null && System.IO.File.Exists(htmlPath))
+                    if (canliDestekli)
+                    {
+                        try
                         {
-                            SelectedPreviewWebViewUri = new Uri(htmlPath);
-                            WebViewPreviewVisibility = Visibility.Visible;
-                            livePreviewSuccessful = true;
+                            // Doğrudan WebView (Sadece PDF)
+                            if (ext == ".pdf")
+                            {
+                                if (token.IsCancellationRequested) return;
+
+                                // WebView2'yi göster ve PDF'i yükle
+                                SelectedPreviewWebViewUri = new Uri(path);
+                                WebViewPreviewVisibility = Visibility.Visible;
+                                livePreviewSuccessful = true;
+                            }
+                            // HTML'e dönüşüm (DOCX, XLSX, CSV ve TXT türevleri)
+                            else if (ext is ".docx" or ".xlsx" or ".csv" or ".txt" or ".log" or ".xml" or ".json" or ".cs" or ".html" or ".css")
+                            {
+                                StatusMessage = "Canlı önizleme için dosya dönüştürülüyor...";
+
+                                string? htmlPath = await ConvertFileToHtmlAsync(path, ext, Query, token);
+                                if (token.IsCancellationRequested) return;
+
+                                StatusMessage = "Hazır.";
+
+                                if (htmlPath != null && System.IO.File.Exists(htmlPath))
+                                {
+                                    // WebView2'ye yeni URI'yi yükle
+                                    SelectedPreviewWebViewUri = new Uri(htmlPath);
+                                    WebViewPreviewVisibility = Visibility.Visible;
+                                    livePreviewSuccessful = true;
+                                }
+                                else
+                                {
+                                    _logger.LogWarning("HTML dönüşüm başarısız, Rapor moduna düşülüyor: {FilePath}", path);
+                                    livePreviewSuccessful = false;
+                                    autoFallbackToReportMode = true;
+                                }
+                            }
                         }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Canlı önizleme hatası, Rapor moduna düşülüyor: {FilePath}", path);
+                            livePreviewSuccessful = false;
+                            autoFallbackToReportMode = true;
+                        }
+                    }
+                    else
+                    {
+                        // Canlı modda desteklenmeyen tür — otomatik Rapor moduna düş
+                        _logger.LogInformation("Canlı modda desteklenmeyen format {Extension}, Rapor moduna düşülüyor.", ext);
+                        livePreviewSuccessful = false;
+                        autoFallbackToReportMode = true;
                     }
                 }
 
-                // ********* RAPOR MODU (veya Canlı Mod Başarısız Olursa YEDEK MOD) *********
-                if (UserSettings.EnablePreview && !livePreviewSuccessful)
+                // ********* RAPOR MODU (Düz Metin/RichTextBox) *********
+                // - Doğrudan Rapor modu seçilmişse VEYA
+                // - Canlı modda desteklenmeyen formatlar için otomatik düşüş
+                if (UserSettings.EnablePreview &&
+                    (UserSettings.PreviewMode == PreviewMode.Rapor || !livePreviewSuccessful || autoFallbackToReportMode))
                 {
-                    if (UserSettings.PreviewMode == PreviewMode.Canli)
+                    if (autoFallbackToReportMode)
                     {
                         StatusMessage = "Canlı mod desteklenmiyor, Rapor moduna düşülüyor...";
                     }
@@ -581,49 +701,50 @@ namespace WpfIndexer.ViewModels
                         StatusMessage = "Önizleme indeksten yükleniyor...";
                     }
 
-                    var indexDefinition = IndexSettings.Indexes.FirstOrDefault(i => i.Name == SelectedSearchResult.IndexName);
+                    var indexDefinition = IndexSettings.Indexes.FirstOrDefault(i => i.Name == currentSelection.IndexName);
                     if (indexDefinition == null)
                     {
+                        if (token.IsCancellationRequested) return;
                         UnsupportedMessage = "Hata: İndeks tanımı bulunamadı.";
-                        StatusMessage = "Hazır.";
                         OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                         return;
                     }
 
-                    string content = await _indexService.GetContentByPathAsync(indexDefinition.IndexPath, SelectedSearchResult.Path);
-                    StatusMessage = "Hazır.";
-
+                    string content = await _indexService.GetContentByPathAsync(indexDefinition.IndexPath, path);
                     if (token.IsCancellationRequested) return;
+
+                    StatusMessage = "Hazır.";
 
                     if (!string.IsNullOrEmpty(content))
                     {
                         SelectedPreviewContent = content;
-                        OnPropertyChanged(nameof(TextPreviewVisibility));
-                        return;
+                        HighlightPreviewContent(); // Vurgulamayı yap
+                        OnPropertyChanged(nameof(TextPreviewVisibility)); // Paneli görünür yap
                     }
-                }
-
-                if (!livePreviewSuccessful)
-                {
-                    UnsupportedMessage = $"Bu dosya türü ({ext}) için önizleme desteklenmiyor veya dosya boş.";
-                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+                    else
+                    {
+                        if (token.IsCancellationRequested) return;
+                        UnsupportedMessage = $"Bu dosya türü ({ext}) için önizleme desteklenmiyor veya dosya içeriği boş.";
+                    }
                 }
             }
             catch (Exception ex)
             {
+                if (token.IsCancellationRequested) return;
+
                 StatusMessage = "Hazır.";
                 UnsupportedMessage = $"Önizleme yüklenirken hata:\n{ex.Message}";
-                OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
-                _logger.LogError(ex, "Önizleme yüklenirken hata oluştu: {FilePath}", SelectedSearchResult?.Path);
+                _logger.LogError(ex, "Önizleme yüklenirken hata oluştu: {FilePath}", currentSelection?.Path);
             }
             finally
             {
                 if (!token.IsCancellationRequested)
                 {
-                    HighlightPreviewContent();
+                    OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                 }
             }
         }
+
 
         // --- RAPOR MODU VURGULAMA (Lucene Highlighter) ---
         private void HighlightPreviewContent()
@@ -675,6 +796,8 @@ namespace WpfIndexer.ViewModels
 
             if (!terms.Any()) return htmlContent;
 
+            // DÜZELTME: Vurgulama <style> etiketleri içine (CSS) yazıldığı için
+            // buradaki stil (inline) kaldırıldı.
             string pattern = "(>)([^<]*)(<)";
 
             return Regex.Replace(htmlContent, pattern, m =>
@@ -684,11 +807,40 @@ namespace WpfIndexer.ViewModels
                 {
                     textBetweenTags = Regex.Replace(textBetweenTags,
                         Regex.Escape(term),
-                        match => $"<mark style='background:yellow; color:black;'>{match.Value}</mark>",
+                        match => $"<mark>{match.Value}</mark>", // style='...' kaldırıldı
                         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
                 }
                 return m.Groups[1].Value + textBetweenTags + m.Groups[3].Value;
             }, RegexOptions.CultureInvariant);
+        }
+
+        // DÜZELTME: Kullanıcının sağladığı (Suggestion 1) stil metodu
+        private string GetHtmlThemeStyles()
+        {
+            if (UserSettings.Theme.ToString() == "Dark")
+            {
+                // Koyu tema: koyu arka plan, açık metin
+                return @"
+<style>
+    body { background-color: #1E1E1E; color: #FFFFFF; font-family: sans-serif; white-space: pre-wrap; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #555555; padding: 4px; text-align: left; }
+    h2 { color: #FFFFFF; }
+    mark { background: yellow; color: black; }
+</style>";
+            }
+            else
+            {
+                // Açık tema: beyaz arka plan, siyah metin
+                return @"
+<style>
+    body { background-color: #FFFFFF; color: #000000; font-family: sans-serif; white-space: pre-wrap; }
+    table { border-collapse: collapse; }
+    th, td { border: 1px solid #CCCCCC; padding: 4px; text-align: left; }
+    h2 { color: #000000; }
+    mark { background: yellow; color: black; }
+</style>";
+            }
         }
 
         private async Task<string?> ConvertFileToHtmlAsync(string sourcePath, string extension, string rawQuery, CancellationToken token)
@@ -697,6 +849,8 @@ namespace WpfIndexer.ViewModels
             System.IO.Directory.CreateDirectory(tempHtmlDir);
             string tempHtmlPath = Path.Combine(tempHtmlDir, $"preview_{Guid.NewGuid()}.html");
             string htmlContent = string.Empty;
+
+            string themeStyle = GetHtmlThemeStyles();
 
             if (token.IsCancellationRequested) return null;
 
@@ -715,34 +869,58 @@ namespace WpfIndexer.ViewModels
                             memoryStream.Write(byteArray, 0, byteArray.Length);
                             memoryStream.Position = 0;
 
-                            using (var wDoc = WordprocessingDocument.Open(memoryStream, true))
+                            try
                             {
-                                Func<ImageInfo, XElement> imageHandler = imageInfo =>
+                                using (var wDoc = WordprocessingDocument.Open(memoryStream, true))
                                 {
-                                    using (var ms = new MemoryStream())
+                                    if (wDoc.MainDocumentPart == null)
                                     {
-                                        imageInfo.Bitmap.Save(ms, ImageFormat.Png);
-                                        string base64 = Convert.ToBase64String(ms.ToArray());
-                                        return new XElement(Xhtml.img,
-                                            new XAttribute("src", $"data:image/png;base64,{base64}"),
-                                            new XAttribute("width", imageInfo.Bitmap.Width.ToString()),
-                                            new XAttribute("height", imageInfo.Bitmap.Height.ToString()));
+                                        _logger.LogWarning("DOCX -> HTML dönüştürme atlandı (MainDocumentPart null): {sourcePath}", sourcePath);
+                                        htmlContent = string.Empty;
+                                        return;
                                     }
-                                };
 
-                                var settings = new HtmlConverterSettings()
-                                {
-                                    ImageHandler = imageHandler,
-                                    PageTitle = "Preview"
-                                };
+                                    Func<ImageInfo, XElement> imageHandler = imageInfo =>
+                                    {
+                                        using (var ms = new MemoryStream())
+                                        {
+                                            imageInfo.Bitmap.Save(ms, ImageFormat.Png);
+                                            string base64 = Convert.ToBase64String(ms.ToArray());
+                                            return new XElement(Xhtml.img,
+                                                new XAttribute("src", $"data:image/png;base64,{base64}"),
+                                                new XAttribute("width", imageInfo.Bitmap.Width.ToString()),
+                                                new XAttribute("height", imageInfo.Bitmap.Height.ToString()));
+                                        }
+                                    };
 
-                                XElement html = HtmlConverter.ConvertToHtml(wDoc, settings);
-                                htmlContent = html.ToString();
+                                    var settings = new HtmlConverterSettings()
+                                    {
+                                        ImageHandler = imageHandler,
+                                        PageTitle = "Preview"
+                                    };
+
+                                    XElement html = HtmlConverter.ConvertToHtml(wDoc, settings);
+                                    htmlContent = html.ToString();
+
+                                    // DÜZELTME: HTML tema stilini enjekte et
+                                    htmlContent = htmlContent.Replace("</head>", themeStyle + "</head>");
+                                }
+                            }
+                            catch (ArgumentNullException ex)
+                            {
+                                _logger.LogError(ex, "DOCX -> HTML dönüştürme hatası (ArgumentNullException, muhtemelen bozuk dosya): {sourcePath}", sourcePath);
+                                htmlContent = string.Empty;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "DOCX -> HTML dönüştürme genel hatası: {sourcePath}", sourcePath);
+                                htmlContent = string.Empty;
                             }
                         }
 
                     }, token);
                 }
+
                 // ********* .XLSX İÇİN (ClosedXML) *********
                 else if (extension == ".xlsx")
                 {
@@ -750,57 +928,79 @@ namespace WpfIndexer.ViewModels
                     {
                         if (token.IsCancellationRequested) return;
 
-                        var html = new StringBuilder("<html><head><meta charset='UTF-8'><style>table { border-collapse: collapse; font-family: sans-serif; } th, td { border: 1px solid #ccc; padding: 4px; text-align: left; mso-number-format:\\@; }</style></head><body>");
-
-                        using (var workbook = new XLWorkbook(sourcePath))
+                        try
                         {
-                            var ws = workbook.Worksheets.FirstOrDefault(w => w.Visibility == XLWorksheetVisibility.Visible);
-                            if (ws != null)
-                            {
-                                html.Append($"<h2>{ws.Name}</h2><table>");
-                                foreach (var row in ws.RowsUsed().Take(500))
-                                {
-                                    if (token.IsCancellationRequested) return;
-                                    html.Append("<tr>");
+                            var html = new StringBuilder($"<html><head><meta charset='UTF-8'>{themeStyle}</head><body>");
 
-                                    // DÜZELTME (Hata CS1503): 'CellsUsed(true)' -> 'CellsUsed(XLCellsUsedOptions.Contents)'
-                                    foreach (var cell in row.CellsUsed(XLCellsUsedOptions.Contents).Take(50))
+                            using (var workbook = new XLWorkbook(sourcePath))
+                            {
+                                var ws = workbook.Worksheets.FirstOrDefault(w => w.Visibility == XLWorksheetVisibility.Visible);
+                                if (ws != null)
+                                {
+                                    html.Append($"<h2>{ws.Name}</h2><table>");
+                                    foreach (var row in ws.RowsUsed().Take(500))
                                     {
-                                        html.Append($"<td>{cell.GetFormattedString()}</td>");
+                                        if (token.IsCancellationRequested) return;
+                                        html.Append("<tr>");
+
+                                        foreach (var cell in row.CellsUsed(XLCellsUsedOptions.Contents).Take(50))
+                                        {
+                                            html.Append($"<td>{System.Security.SecurityElement.Escape(cell.GetFormattedString())}</td>");
+                                        }
+                                        html.Append("</tr>");
                                     }
-                                    html.Append("</tr>");
+                                    html.Append("</table>");
                                 }
-                                html.Append("</table>");
                             }
+                            html.Append("</body></html>");
+                            htmlContent = html.ToString();
                         }
-                        html.Append("</body></html>");
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "XLSX -> HTML dönüştürme hatası: {sourcePath}", sourcePath);
+                            htmlContent = string.Empty;
+                        }
+                    }, token);
+                }
+                // ********* .CSV İÇİN *********
+                else if (extension == ".csv")
+                {
+                    await Task.Run(async () =>
+                    {
+                        var html = new StringBuilder($"<html><head><meta charset='UTF-8'>{themeStyle}</head><body><table>");
+                        string[] lines = await System.IO.File.ReadAllLinesAsync(sourcePath, token);
+
+                        if (lines.Length > 0)
+                        {
+                            html.Append("<thead><tr>");
+                            foreach (var cell in lines[0].Split(',')) { html.Append($"<th>{System.Security.SecurityElement.Escape(cell)}</th>"); }
+                            html.Append("</tr></thead>");
+                            html.Append("<tbody>");
+                            foreach (var line in lines.Skip(1).Take(1000))
+                            {
+                                if (token.IsCancellationRequested) return;
+                                html.Append("<tr>");
+                                foreach (var cell in line.Split(',')) { html.Append($"<td>{System.Security.SecurityElement.Escape(cell)}</td>"); }
+                                html.Append("</tr>");
+                            }
+                            html.Append("</tbody>");
+                        }
+                        html.Append("</table></body></html>");
                         htmlContent = html.ToString();
                     }, token);
                 }
-                // ********* .CSV İÇİN (Mevcut kod) *********
-                else if (extension == ".csv")
+                // DÜZELTME: .TXT ve DİĞER METİN DOSYALARI İÇİN
+                else if (extension is ".txt" or ".log" or ".xml" or ".json" or ".cs" or ".html" or ".css")
                 {
-                    var html = new StringBuilder("<html><head><meta charset='UTF-8'><style>table { border-collapse: collapse; font-family: sans-serif; } th, td { border: 1px solid #ccc; padding: 4px; text-align: left; }</style></head><body><table>");
-
-                    string[] lines = await System.IO.File.ReadAllLinesAsync(sourcePath, token);
-
-                    if (lines.Length > 0)
+                    await Task.Run(async () =>
                     {
-                        html.Append("<thead><tr>");
-                        foreach (var cell in lines[0].Split(',')) { html.Append($"<th>{cell}</th>"); }
-                        html.Append("</tr></thead>");
-                        html.Append("<tbody>");
-                        foreach (var line in lines.Skip(1).Take(1000))
-                        {
-                            if (token.IsCancellationRequested) return null;
-                            html.Append("<tr>");
-                            foreach (var cell in line.Split(',')) { html.Append($"<td>{cell}</td>"); }
-                            html.Append("</tr>");
-                        }
-                        html.Append("</tbody>");
-                    }
-                    html.Append("</table></body></html>");
-                    htmlContent = html.ToString();
+                        string content = await File.ReadAllTextAsync(sourcePath, token);
+                        // Düz metni HTML'e çevirirken <pre> etiketi (veya white-space: pre-wrap stili)
+                        // boşlukları ve satır sonlarını korur.
+                        htmlContent = $"<html><head><meta charset='UTF-8'>{themeStyle}</head><body>" +
+                                      $"<pre>{System.Security.SecurityElement.Escape(content)}</pre>" +
+                                      $"</body></html>";
+                    }, token);
                 }
                 else
                 {
@@ -809,9 +1009,11 @@ namespace WpfIndexer.ViewModels
 
                 if (token.IsCancellationRequested) return null;
 
-                // Dönüşen HTML'i vurgula
-                // Hata CS0126 ('string' hatası) bu satırdaydı,
-                // yukarıdaki ImageHandler düzeltildiği için artık çalışacaktır.
+                if (string.IsNullOrEmpty(htmlContent))
+                {
+                    return null;
+                }
+
                 htmlContent = ApplyHtmlHighlighting(htmlContent, rawQuery);
 
                 if (token.IsCancellationRequested) return null;
@@ -867,6 +1069,26 @@ namespace WpfIndexer.ViewModels
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+            if (name == nameof(SelectedSearchResult))
+            {
+                // Önceki önizlemeyi temizle (WebView2 Source'u null yapmadan)
+                WebViewPreviewVisibility = Visibility.Collapsed;
+                SelectedPreviewVideoPath = null;
+                SelectedPreviewImagePath = null;
+                SelectedPreviewContent = string.Empty;
+                HighlightedPreviewContent = string.Empty;
+
+                VideoPreviewVisibility = Visibility.Collapsed;
+
+                OnPropertyChanged(nameof(ImagePreviewVisibility));
+                OnPropertyChanged(nameof(TextPreviewVisibility));
+                OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
+
+                // Yeni önizlemeyi yükle
+                _ = LoadPreviewAsyncWithToken();
+                return;
+            }
 
             if (name == nameof(SelectedPreviewContent) ||
                 name == nameof(SelectedPreviewImagePath) ||
