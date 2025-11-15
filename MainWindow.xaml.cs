@@ -19,11 +19,14 @@ namespace WpfIndexer.Views
             InitializeComponent();
         }
 
-        // --- ÇİFT TIKLAMA METODU ---
+        // --- ÇİFT TIKLAMA METODU (GÜNCELLENDİ) ---
         private void SearchResultsListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            if (sender is not ListView lv || lv.SelectedItem is not SearchResult selected)
+            // ===== DEĞİŞİKLİK BURADA =====
+            // 'ListView lv' -> 'DataGrid dg' olarak değiştirildi.
+            if (sender is not DataGrid dg || dg.SelectedItem is not SearchResult selected)
                 return;
+            // =============================
 
             string? path = selected.Path;
 
@@ -45,40 +48,58 @@ namespace WpfIndexer.Views
 
                     string tempDir = Path.Combine(Path.GetTempPath(), "WpfIndexerPreview");
                     Directory.CreateDirectory(tempDir);
-                    tempFile = Path.Combine(tempDir, Path.GetFileName(entryPath));
 
                     using (var archive = ArchiveFactory.Open(archivePath))
                     {
                         var entry = archive.Entries.FirstOrDefault(e => e.Key != null && e.Key.Replace("\\", "/") == entryPath.Replace("\\", "/"));
-                        if (entry != null)
+                        if (entry == null)
                         {
-                            entry.WriteToFile(tempFile, new ExtractionOptions() { Overwrite = true });
-                            path = tempFile;
-                        }
-                        else
-                        {
-                            MessageBox.Show($"'{entryPath}' dosyası '{archivePath}' içinde bulunamadı.", "Hata", MessageBoxButton.OK, MessageBoxImage.Error);
+                            MessageBox.Show($"Arşiv içinde dosya bulunamadı: {entryPath}", "Hata", MessageBoxButton.OK, MessageBoxImage.Error);
                             return;
                         }
-                    }
-                }
 
-                // Durum 2: Normal dosya
-                if (File.Exists(path))
-                {
-                    Process.Start(new ProcessStartInfo(path)
-                    {
-                        UseShellExecute = true
-                    });
+                        tempFile = Path.Combine(tempDir, Path.GetFileName(entryPath));
+
+                        // Dosya zaten varsa ve kilitsizse, üzerine yaz
+                        if (File.Exists(tempFile))
+                        {
+                            try
+                            {
+                                using (FileStream fs = File.Open(tempFile, FileMode.Open, FileAccess.Read, FileShare.None))
+                                {
+                                    // Dosya erişilebilir, kilitsiz. Üzerine yazılabilir.
+                                }
+                            }
+                            catch (IOException)
+                            {
+                                // Dosya kilitli (muhtemelen açık). Açmayı dene.
+                                Process.Start(new ProcessStartInfo(tempFile) { UseShellExecute = true });
+                                return;
+                            }
+                        }
+
+                        entry.WriteToFile(tempFile, new ExtractionOptions() { Overwrite = true });
+                    }
+                    Process.Start(new ProcessStartInfo(tempFile) { UseShellExecute = true });
                 }
+                // Durum 2: Normal dosya
                 else
                 {
-                    MessageBox.Show($"Dosya bulunamadı: {path}", "Hata", MessageBoxButton.OK, MessageBoxImage.Error);
+                    if (!File.Exists(path))
+                    {
+                        MessageBox.Show($"Dosya bulunamadı: {path}", "Hata", MessageBoxButton.OK, MessageBoxImage.Error);
+                        return;
+                    }
+                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Dosya açılırken bir hata oluştu: {ex.Message}", "Hata", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Dosya açılamadı:\n{ex.Message}", "Hata", MessageBoxButton.OK, MessageBoxImage.Error);
+                if (DataContext is MainViewModel vm)
+                {
+                    vm.StatusMessage = $"Hata: {ex.Message}";
+                }
             }
         }
 
@@ -117,6 +138,15 @@ namespace WpfIndexer.Views
                 {
                     SearchTextBoxPre.Focus(); // Arama öncesi (merkezi) kutu
                 }
+            }
+        }
+        private void SuggestionPopup_Closed(object sender, EventArgs e)
+        {
+            // Popup (dışarı tıklayarak vs.) kapandığında,
+            // ViewModel'deki IsSuggestionsOpen özelliğini manuel olarak false yap.
+            if (DataContext is WpfIndexer.ViewModels.MainViewModel vm && vm.IsSuggestionsOpen)
+            {
+                vm.IsSuggestionsOpen = false;
             }
         }
     }

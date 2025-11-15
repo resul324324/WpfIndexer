@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
+using System.IO; // Path.GetDirectoryName ve File.GetLastWriteTime için EKLENDİ
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -418,19 +418,56 @@ namespace WpfIndexer.Services
                         using var reader = DirectoryReader.Open(dir);
                         var searcher = new IndexSearcher(reader);
                         var hits = searcher.Search(luceneQuery, maxResults).ScoreDocs;
+
+                        // ====================================================================
+                        // >>>>>>>> ADIM 2 DEĞİŞİKLİĞİ BURADA BAŞLIYOR <<<<<<<<<
+                        // ====================================================================
                         foreach (var hit in hits)
                         {
                             var doc = searcher.Doc(hit.Doc);
-                            // 3. YENİ: Sonuçları 'results' yerine 'response.Results'a ekle
+
+                            // --- YENİ EKLENEN VERİ ÇEKME İŞLEMLERİ ---
+
+                            // 1. Path (zaten vardı, sadece değişken adı alalım)
+                            string docPath = doc.Get("path_exact") ?? string.Empty;
+                            if (string.IsNullOrEmpty(docPath)) continue; // Path yoksa atla
+
+                            // 2. Tarihi al (Lucene'de Ticks olarak saklanmış)
+                            long.TryParse(doc.GetField("modified_date")?.GetStringValue(), out long ticks);
+                            DateTime modificationDate = (ticks > 0) ? new DateTime(ticks) : DateTime.MinValue;
+
+                            // 3. Boyutu al (zaten vardı)
+                            long.TryParse(doc.Get("size"), out long size);
+
+                            // 4. Klasör yolunu al (Sadece klasör)
+                            string directoryPath = Path.GetDirectoryName(docPath) ?? docPath; // Null gelirse path'in kendisidir (örn: C:\)
+
+                            // --- BİTTİ ---
+
+                            // 3. YENİ: Sonuçları 'response.Results'a ekle
+                            // SearchResult nesnesini YENİ özelliklerle oluştur
                             response.Results.Add(new SearchResult
                             {
-                                Path = doc.Get("path_exact") ?? string.Empty,
-                                FileName = doc.Get("filename") ?? string.Empty,
-                                Extension = doc.Get("extension") ?? string.Empty,
-                                Size = long.TryParse(doc.Get("size"), out long size) ? size : 0,
-                                IndexName = indexName
+                                // Mevcut 'required' alanlar
+                                Path = docPath,
+                                FileName = doc.Get("filename") ?? System.IO.Path.GetFileName(docPath), // Fallback
+                                Extension = doc.Get("extension") ?? System.IO.Path.GetExtension(docPath), // Fallback
+                                IndexName = indexName,
+
+                                // Mevcut diğer alanlar
+                                Size = size,
+                                Snippet = string.Empty, // Snippet'i şimdilik boş başlatıyoruz. Vurgulama sonraki adım.
+
+                                // YENİ EKLENEN ALANLAR
+                                ModificationDate = modificationDate,
+                                DirectoryPath = directoryPath,
+                                FileType = string.Empty, // VM'de (sonraki adımda) doldurulacak
+                                FileIcon = null          // VM'de (sonraki adımda) doldurulacak
                             });
                         }
+                        // ==================================================================
+                        // >>>>>>>> ADIM 2 DEĞİŞİKLİĞİ BURADA BİTİYOR <<<<<<<<<
+                        // ==================================================================
                     }
                 }
                 catch (ParseException pex)

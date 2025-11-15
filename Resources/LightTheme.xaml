@@ -197,58 +197,13 @@
         </Setter>
     </Style>
 
-    <Style TargetType="{x:Type ListViewItem}">
-        <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
-        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Padding" Value="0"/>
-        
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="{x:Type ListViewItem}">
-                    <Border x:Name="Bd"
-                            Background="Transparent"
-                            BorderBrush="Transparent"
-                            BorderThickness="0"
-                            SnapsToDevicePixels="True">
-                        
-                        <GridViewRowPresenter 
-                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                            SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
-                    </Border>
-                    
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
-                        </Trigger>
-                        
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BrandBlueBrush}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
-                        </Trigger>
-                        
-                        <MultiTrigger>
-                            <MultiTrigger.Conditions>
-                                <Condition Property="IsSelected" Value="True"/>
-                                <Condition Property="IsFocused" Value="False"/>
-                            </MultiTrigger.Conditions>
-                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource BrandBlueBrush}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
-                        </MultiTrigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
     <Style TargetType="{x:Type Menu}">
         <Setter Property="Background" Value="{DynamicResource MenuBackgroundColor}"/>
         <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
     </Style>
 
     <Style TargetType="{x:Type MenuItem}">
-        <Setter Property="Background" Value="{DynamicResource MenuBackgroundColor}" />
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{DynamicResource TextColor}" />
         <Setter Property="BorderBrush" Value="{DynamicResource MenuPopupBorderColor}" />
         <Setter Property="BorderThickness" Value="0"/>
@@ -263,29 +218,29 @@
                 <ControlTemplate TargetType="MenuItem">
                     <Grid>
                         <Border x:Name="Border"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="0" 
-                                SnapsToDevicePixels="True">
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="Transparent"
+                            BorderThickness="0" 
+                            CornerRadius="4" SnapsToDevicePixels="True">
                             <ContentPresenter ContentSource="Header"
-                                              RecognizesAccessKey="False"
-                                              Margin="{TemplateBinding Padding}"
-                                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                                          RecognizesAccessKey="False"
+                                          Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
                         </Border>
 
                         <Popup x:Name="SubMenuPopup"
-                               Placement="Right"
-                               IsOpen="{TemplateBinding IsSubmenuOpen}"
-                               AllowsTransparency="True"
-                               Focusable="False"
-                               PopupAnimation="Fade">
+                           Placement="Right"
+                           IsOpen="{TemplateBinding IsSubmenuOpen}"
+                           AllowsTransparency="True"
+                           Focusable="False"
+                           PopupAnimation="Fade">
                             <Border Background="{DynamicResource MenuBackgroundColor}"
-                                    BorderBrush="{DynamicResource MenuPopupBorderColor}"
-                                    BorderThickness="1"
-                                    SnapsToDevicePixels="True">
+                                BorderBrush="{DynamicResource MenuPopupBorderColor}"
+                                BorderThickness="1"
+                                CornerRadius="8" Padding="4"    SnapsToDevicePixels="True">
                                 <StackPanel IsItemsHost="True"
-                                            KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                        KeyboardNavigation.DirectionalNavigation="Cycle"/>
                             </Border>
                         </Popup>
                     </Grid>
@@ -297,13 +252,17 @@
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Foreground" Value="{StaticResource DisabledForegroundColor}"/>
                         </Trigger>
+
                         <Trigger Property="Role" Value="TopLevelHeader">
                             <Setter TargetName="SubMenuPopup" Property="Placement" Value="Bottom"/>
                             <Setter TargetName="Border" Property="BorderThickness" Value="0"/>
+                            <Setter TargetName="Border" Property="CornerRadius" Value="0"/>
                         </Trigger>
                         <Trigger Property="Role" Value="TopLevelItem">
                             <Setter TargetName="Border" Property="BorderThickness" Value="0"/>
+                            <Setter TargetName="Border" Property="CornerRadius" Value="0"/>
                         </Trigger>
+
                         <Trigger Property="Role" Value="SubmenuHeader">
                             <Setter TargetName="SubMenuPopup" Property="Placement" Value="Right"/>
                         </Trigger>

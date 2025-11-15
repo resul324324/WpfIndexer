@@ -6,9 +6,9 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
-using System.Windows;
+using System.Windows; // Clipboard için EKLENDİ
 using System.Windows.Input;
-using WpfIndexer.Helpers;
+using WpfIndexer.Helpers; // ShellIconHelper için EKLENDİ (zaten vardı ama doğrulayalım)
 using WpfIndexer.Models;
 using WpfIndexer.Services;
 using WpfIndexer.Views;
@@ -39,6 +39,7 @@ using ClosedXML.Excel;
 
 // DÜZELTME: 'Theme' enum'unun bulunduğu namespace'i ekliyoruz.
 using WpfIndexer.Services;
+using System.Collections.Specialized; // Dosya kopyalama (Clipboard) için EKLENDİ
 
 [assembly: System.Runtime.Versioning.SupportedOSPlatform("windows")]
 
@@ -98,6 +99,8 @@ namespace WpfIndexer.ViewModels
             {
                 _selectedSearchResult = value;
                 OnPropertyChanged();
+                // NOT: Komutların güncellenmesi OnPropertyChanged'ın
+                // sonundaki merkezi mantığa taşındı.
             }
         }
         private string _statusMessage = "Hazır.";
@@ -183,7 +186,7 @@ namespace WpfIndexer.ViewModels
             set { _unsupportedMessage = value; OnPropertyChanged(); }
         }
 
-        // Komutlar
+        // --- Komutlar ---
         public ICommand SearchCommand { get; }
         public RelayCommand OpenFileLocationCommand { get; }
         public ICommand SelectSuggestionCommand { get; }
@@ -196,6 +199,23 @@ namespace WpfIndexer.ViewModels
         public ICommand ExportResultsCommand { get; }
         public ICommand ExitApplicationCommand { get; }
         public ICommand OpenViewSettingsCommand { get; }
+
+        // --- YENİ EKLENEN KOMUTLAR ---
+
+        /// <summary>
+        /// Seçili dosyayı panoya (CTRL+C) "dosya olarak" kopyalar.
+        /// </summary>
+        public ICommand CopyFileCommand { get; }
+
+        /// <summary>
+        /// Önizleme bölmesindeki "Dosya Konumunu Aç" butonu için.
+        /// </summary>
+        public ICommand OpenContainingFolderCommand { get; }
+
+        /// <summary>
+        /// Önizleme bölmesindeki "Kopyala" butonu için (Dosyayı kopyalar).
+        /// </summary>
+        public ICommand CopyFileFromPreviewCommand { get; }
 
         // Constructor
         public MainViewModel(
@@ -218,8 +238,8 @@ namespace WpfIndexer.ViewModels
             _searchLogger = searchLogger;
             IsSearchPerformed = false;
 
-            // Komut tanımlamaları
-            SearchCommand = new RelayCommand(async _ => await SearchAsync(), _ => !string.IsNullOrWhiteSpace(Query));
+            // --- Komut tanımlamaları ---
+            SearchCommand = new RelayCommand(async _ => await SearchAsync(), _ => !string.IsNullOrWhiteSpace(Query) && IndexSettings.Indexes.Any(i => i.IsSelected));
             OpenFileLocationCommand = new RelayCommand(_ => OpenFileLocation(), _ => SelectedSearchResult != null);
             SelectSuggestionCommand = new RelayCommand(SelectSuggestion);
             OpenIndexManagementCommand = new RelayCommand(_ => OpenWindow<IndexManagementWindow>());
@@ -231,6 +251,19 @@ namespace WpfIndexer.ViewModels
             ExportResultsCommand = new RelayCommand(_ => ExportResults(), _ => SearchResults.Any());
             ExitApplicationCommand = new RelayCommand(_ => Application.Current.Shutdown());
             OpenViewSettingsCommand = new RelayCommand(_ => OpenWindow<ViewSettingsWindow>());
+
+            // --- YENİ KOMUTLARIN TANIMLANMASI ---
+            // Not: 'CanExecute' (_ => SelectedSearchResult != null) durumu,
+            // OnPropertyChanged metodunda (SelectedSearchResult değiştiğinde) güncellenecek.
+            CopyFileCommand = new RelayCommand(_ => CopySelectedFile(), _ => SelectedSearchResult != null);
+
+            // Bu komut, zaten var olan OpenFileLocation metodunu yeniden kullanıyor.
+            OpenContainingFolderCommand = new RelayCommand(_ => OpenFileLocation(), _ => SelectedSearchResult != null);
+
+            // Bu komut, (isteğin üzerine) listedeki kopyalama ile aynı işi yapıyor.
+            CopyFileFromPreviewCommand = new RelayCommand(_ => CopySelectedFile(), _ => SelectedSearchResult != null);
+            // --- BİTTİ ---
+
 
             _autoUpdateService.StatusChanged += (status) =>
             {
@@ -331,8 +364,40 @@ namespace WpfIndexer.ViewModels
                 Application.Current.Dispatcher.Invoke(() =>
                 {
                     SearchResults.Clear();
+
+                    // ====================================================================
+                    // >>>>>>>> ADIM 4 DEĞİŞİKLİĞİ BURADA BAŞLIYOR (İKON YÜKLEME) <<<<<<<<<
+                    // ====================================================================
+
+                    // Not: Bu işlemi 'async' yapmıyoruz. Sebebi:
+                    // 1. Sonuçlar listeye eklenmeden önce ikon ve tür adlarının yüklenmiş olmasını istiyoruz.
+                    // 2. Bu, UI'ın sonradan "pıt pıt" güncellenmesini engeller (INotifyPropertyChanged gerekmez).
+                    // 3. ShellIconHelper (Adım 3) cache (önbellek) kullandığı için,
+                    //    bu işlem (ilk .pdf, .txt vb. hariç) ÇOK HIZLI olacaktır.
+
                     foreach (var item in response.Results)
+                    {
+                        try
+                        {
+                            // Adım 3'te oluşturduğumuz Helper'ı burada kullanıyoruz.
+                            item.FileIcon = Helpers.ShellIconHelper.GetFileIcon(item.Extension);
+                            item.FileType = Helpers.ShellIconHelper.GetFileTypeName(item.Extension);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Dosya ikonu/türü yüklenemedi: {Path}", item.Path);
+                            // Hata olursa, 'Tür' sütununda sadece uzantıyı göster
+                            item.FileType = item.Extension.TrimStart('.').ToUpper();
+                            item.FileIcon = null; // İkon olmasın
+                        }
+
+                        // İkonu ve Türü yüklenmiş olan sonucu listeye ekle
                         SearchResults.Add(item);
+                    }
+
+                    // ==================================================================
+                    // >>>>>>>> ADIM 4 DEĞİŞİKLİĞİ BURADA BİTİYOR <<<<<<<<<
+                    // ==================================================================
 
                     StatusMessage = $"{response.Results.Count} sonuç {stopwatch.Elapsed.TotalSeconds:F2} saniyede bulundu.";
                     _logger.LogInformation("Arama tamamlandı: Sorgu '{Query}', Sonuç: {ResultCount}, Süre: {Duration}ms", Query, response.Results.Count, stopwatch.ElapsedMilliseconds);
@@ -516,17 +581,8 @@ namespace WpfIndexer.ViewModels
         // --- ÖNİZLEME (PREVIEW) MANTIĞI ---
         // -------------------------------------------------------------------
 
-        // -------------------------------------------------------------------
-        // --- ÖNİZLEME (PREVIEW) MANTIĞI - GÜNCELLENMİŞ ---
-        // -------------------------------------------------------------------
-
-        // -------------------------------------------------------------------
-        // --- ÖNİZLEME (PREVIEW) MANTIĞI - GÜNCELLENMİŞ ---
-        // -------------------------------------------------------------------
-
-        // -------------------------------------------------------------------
-        // --- ÖNİZLEME (PREVIEW) MANTIĞI - GÜNCELLENMİŞ ---
-        // -------------------------------------------------------------------
+        // (Önizleme mantığı (LoadPreviewAsyncWithToken, ConvertFileToHtmlAsync vb.)
+        // Adım 4'ün konusu OLMADIĞI için olduğu gibi bırakıldı.)
 
         private async Task LoadPreviewAsyncWithToken()
         {
@@ -1030,7 +1086,13 @@ namespace WpfIndexer.ViewModels
                 return null;
             }
         }
-        // --- DİĞER METODLAR ---
+
+        // --- YENİ EKLENEN METOTLAR (Kopyala / Konum Aç) ---
+
+        /// <summary>
+        /// Seçili dosyanın (SelectedSearchResult) bulunduğu klasörü açar ve dosyayı seçer.
+        /// (Bu metot zaten vardı, sadece yeni 'OpenContainingFolderCommand' tarafından da kullanılıyor)
+        /// </summary>
         private void OpenFileLocation()
         {
             if (SelectedSearchResult == null) return;
@@ -1057,11 +1119,52 @@ namespace WpfIndexer.ViewModels
             }
         }
 
+        /// <summary>
+        /// Seçili dosyayı (SelectedSearchResult) panoya "dosya olarak" kopyalar.
+        /// (Windows Gezgini'nde CTRL+V ile yapıştırılabilir hale getirir)
+        /// </summary>
+        private void CopySelectedFile()
+        {
+            if (SelectedSearchResult == null) return;
+            try
+            {
+                string path = SelectedSearchResult.Path;
+                if (path.Contains("|"))
+                {
+                    StatusMessage = "Arşiv (zip, rar vb.) içindeki dosyalar kopyalanamaz.";
+                    return;
+                }
+                if (!System.IO.File.Exists(path))
+                {
+                    StatusMessage = "Dosya bulunamadı veya artık mevcut değil.";
+                    return;
+                }
+
+                // Dosyayı "kes" veya "kopyala" listesine (FileDrop) ekler
+                var fileCollection = new StringCollection { path };
+
+                // Panoya yapıştır (Kopyalama olarak ayarla)
+                Clipboard.SetFileDropList(fileCollection);
+                StatusMessage = $"Dosya panoya kopyalandı: {SelectedSearchResult.FileName}";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Dosya kopyalanamadı: {ex.Message}";
+                _logger.LogError(ex, "Dosya kopyalanamadı: {FilePath}", SelectedSearchResult.Path);
+            }
+        }
+
+        // --- DİĞER METODLAR ---
         private void UpdateCommandCanExecute()
         {
             (SearchCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenFileLocationCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (ExportResultsCommand as RelayCommand)?.RaiseCanExecuteChanged();
+
+            // YENİ EKLENEN KOMUTLARIN DA GÜNCELLENMESİ
+            (CopyFileCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (OpenContainingFolderCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (CopyFileFromPreviewCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         // --- INotifyPropertyChanged ---
@@ -1087,6 +1190,13 @@ namespace WpfIndexer.ViewModels
 
                 // Yeni önizlemeyi yükle
                 _ = LoadPreviewAsyncWithToken();
+
+                // --- YENİ GÜNCELLEME ---
+                // Seçim değiştiğinde, bu seçime bağlı tüm komutların
+                // (Kopyala, Konum Aç vb.) 'CanExecute' durumu güncellenmeli.
+                UpdateCommandCanExecute();
+                // --- BİTTİ ---
+
                 return;
             }
 

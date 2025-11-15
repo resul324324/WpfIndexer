@@ -21,8 +21,9 @@
         <helpers:TextToFlowDocumentHighlightConverter x:Key="HighlightConverter" />
         <helpers:FileSizeConverter x:Key="FileSizeConverter" />
         <helpers:ColorConverter x:Key="ColorConverter" />
-
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
+        <helpers:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
 
         <Style x:Key="RightLayoutStyle" TargetType="Grid">
             <Setter Property="Visibility" Value="Collapsed"/>
@@ -33,7 +34,6 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
-
         <Style x:Key="BottomLayoutStyle" TargetType="Grid">
             <Setter Property="Visibility" Value="Visible"/>
             <Style.Triggers>
@@ -44,65 +44,164 @@
             </Style.Triggers>
         </Style>
 
-        <Style x:Key="ScrollBarThumb" TargetType="{x:Type Thumb}">
+        <Style x:Key="DataGridRowStyle" TargetType="DataGridRow">
+            <Setter Property="Background" Value="{DynamicResource WindowBackgroundColor}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="OverridesDefaultStyle" Value="true"/>
-            <Setter Property="IsTabStop" Value="false"/>
-            <Setter Property="Focusable" Value="false"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type Thumb}">
-                        <Border CornerRadius="4" 
-                                Background="{TemplateBinding Foreground}" 
-                                BorderBrush="Transparent" 
-                                BorderThickness="1" 
-                                Margin="1,0" />
+                    <ControlTemplate TargetType="DataGridRow">
+                        <Border x:Name="DGR_Border"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        SnapsToDevicePixels="True">
+                            <SelectiveScrollingGrid>
+                                <SelectiveScrollingGrid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </SelectiveScrollingGrid.ColumnDefinitions>
+                                <SelectiveScrollingGrid.RowDefinitions>
+                                    <RowDefinition Height="*"/>
+                                    <RowDefinition Height="Auto"/>
+                                </SelectiveScrollingGrid.RowDefinitions>
+
+                                <DataGridCellsPresenter Grid.Column="1"
+                                                ItemsPanel="{TemplateBinding ItemsPanel}"
+                                                SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                            </SelectiveScrollingGrid>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+
+            <Style.Triggers>
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="IsSelected" Value="False"/>
+                        <Condition Property="IsMouseOver" Value="True"/>
+                    </MultiTrigger.Conditions>
+                    <Setter Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
+                </MultiTrigger>
+
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DataGridCellStyle" TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+
+            <Setter Property="Background" Value="Transparent"/>
+
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        Padding="{TemplateBinding Padding}"
+                        SnapsToDevicePixels="True">
+                            <ContentPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="Transparent"/>
+                    <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="DataGridColumnHeaderStyle" TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource MenuBackgroundColor}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        </Style>
+
+        <Style x:Key="IconButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextColor}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource BrandBlueBrush}"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
 
-        <Style x:Key="ScrollBarButton" TargetType="{x:Type RepeatButton}">
+        <Style x:Key="DataGridContextMenuStyle" TargetType="ContextMenu">
+            <Setter Property="Background" Value="{DynamicResource MenuBackgroundColor}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource MenuPopupBorderColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="SnapsToDevicePixels" Value="True"/>
-            <Setter Property="OverridesDefaultStyle" Value="true"/>
-            <Setter Property="IsTabStop" Value="false"/>
-            <Setter Property="Focusable" Value="false"/>
+
+            <Setter Property="Padding" Value="4"/>
+
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type RepeatButton}">
-                        <Border Background="Transparent" />
+                    <ControlTemplate TargetType="{x:Type ContextMenu}">
+                        <Border x:Name="Border"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="8" 
+                        SnapsToDevicePixels="True"
+                        
+                        Padding="{TemplateBinding Padding}">
+
+                            <ItemsPresenter Grid.IsSharedSizeScope="True"
+                                    KeyboardNavigation.DirectionalNavigation="Cycle"
+                                    SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                        </Border>
+
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasDropShadow" Value="True">
+                                <Setter TargetName="Border" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect ShadowDepth="2" Opacity="0.5" BlurRadius="5" 
+                                                  Color="{DynamicResource HighlightColor}"/>
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-
-        <Style TargetType="{x:Type ScrollBar}">
-            <Setter Property="Background" Value="{DynamicResource ControlBackgroundColor}" />
-            <Setter Property="Foreground" Value="{DynamicResource GrayTextColor}" />
-            <Setter Property="Width" Value="12"/>
-            
-            <Setter Property="MinWidth" Value="12"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="{x:Type ScrollBar}">
-                        <Grid SnapsToDevicePixels="True" Background="{TemplateBinding Background}">
-                            <Track x:Name="PART_Track" IsDirectionReversed="True" ViewportSize="NaN" Width="Auto">
-                                <Track.DecreaseRepeatButton>
-                                    <RepeatButton Style="{StaticResource ScrollBarButton}" Command="ScrollBar.LineUpCommand" />
-                                </Track.DecreaseRepeatButton>
-                                <Track.IncreaseRepeatButton>
-                                    <RepeatButton Style="{StaticResource ScrollBarButton}" Command="ScrollBar.LineDownCommand" />
-                                </Track.IncreaseRepeatButton>
-                                <Track.Thumb>
-                                    <Thumb Style="{StaticResource ScrollBarThumb}" />
-                                </Track.Thumb>
-                            </Track>
-                        </Grid>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
     </Window.Resources>
 
     <Grid>
@@ -141,41 +240,60 @@
                         </Style.Triggers>
                     </Style>
                 </Grid.Style>
-
                 <StackPanel Orientation="Vertical" Margin="0,-191,0,0">
-
                     <Image Source="icons/logo.png" Height="240" RenderTransformOrigin="0.504,0.561" />
-
                     <Grid Height="40" Width="500" HorizontalAlignment="Center">
-                        <Border CornerRadius="20" Background="{DynamicResource TextBoxBackgroundColor}" 
-                                BorderBrush="{DynamicResource ControlBorderColor}" BorderThickness="1" 
+                        <Border x:Name="SearchBorderPre" BorderBrush="{DynamicResource ControlBorderColor}" 
+                                BorderThickness="1" 
+                                Background="{DynamicResource TextBoxBackgroundColor}"
                                 VerticalAlignment="Top">
+
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="CornerRadius" Value="20" />
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsSuggestionsOpen}" Value="True" />
+                                                <Condition Binding="{Binding IsSearchPerformed}" Value="False" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="CornerRadius" Value="20,20,0,0" />
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+
                             <Grid Height="40" Margin="-1,0,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <TextBox x:Name="SearchTextBoxPre" Grid.Column="0" 
-                                         Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
-                                         BorderThickness="0" Background="Transparent" 
-                                         VerticalAlignment="Center" Margin="21,0,0,0" FontSize="16"
-                                         Foreground="{DynamicResource TextColor}"
-                                         CaretBrush="{DynamicResource TextColor}">
+                 Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                 BorderThickness="0" Background="Transparent" 
+                 VerticalAlignment="Center" Margin="21,0,0,0" FontSize="16"
+                 Foreground="{DynamicResource TextColor}"
+                 CaretBrush="{DynamicResource TextColor}">
                                     <TextBox.InputBindings>
                                         <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
                                         <KeyBinding Key="Down" Command="ApplicationCommands.NotACommand" />
                                     </TextBox.InputBindings>
                                 </TextBox>
+
                                 <Button Grid.Column="1" Content="&#xE721;" FontFamily="Segoe MDL2 Assets"
-                                        Style="{StaticResource SearchButton}" 
-                                        Command="{Binding SearchCommand}" Margin="0,0,10,0" />
+                Style="{StaticResource SearchButton}" 
+                Command="{Binding SearchCommand}" Margin="0,0,10,0" />
                             </Grid>
                         </Border>
 
                         <Popup x:Name="SuggestionPopupPre"
-                               PlacementTarget="{Binding ElementName=SearchTextBoxPre}"
+                               PlacementTarget="{Binding ElementName=SearchBorderPre}"
                                Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
-                               Width="{Binding ActualWidth, ElementName=SearchTextBoxPre}">
+                               Width="{Binding ActualWidth, ElementName=SearchBorderPre}"
+                               VerticalOffset="1"
+       
+                               Closed="SuggestionPopup_Closed">
+
                             <Popup.Style>
                                 <Style TargetType="{x:Type Popup}">
                                     <Setter Property="IsOpen" Value="False" />
@@ -190,34 +308,93 @@
                                     </Style.Triggers>
                                 </Style>
                             </Popup.Style>
-                            <Border Background="{DynamicResource PreviewBackgroundColor}" 
+
+                            <Border Background="{DynamicResource TextBoxBackgroundColor}" 
                                     BorderBrush="{DynamicResource ControlBorderColor}"
-                                    BorderThickness="1" CornerRadius="5" Margin="0,2,0,0" MaxHeight="200">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                    <ListBox ItemsSource="{Binding Suggestions}"
-                                             SelectionMode="Single"
-                                             Background="Transparent"
-                                             Foreground="{DynamicResource TextColor}">
-                                        <ListBox.ItemContainerStyle>
-                                            <Style TargetType="{x:Type ListBoxItem}">
-                                                <Setter Property="Padding" Value="10,5"/>
-                                                <Setter Property="Cursor" Value="Hand"/>
-                                                <EventSetter Event="UIElement.PreviewMouseLeftButtonDown" Handler="Suggestion_PreviewMouseLeftButtonDown"/>
-                                                <EventSetter Event="UIElement.KeyDown" Handler="Suggestion_KeyDown"/>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
-                                                        <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </ListBox.ItemContainerStyle>
-                                    </ListBox>
-                                </ScrollViewer>
+                                    BorderThickness="1,0,1,1" 
+                                    CornerRadius="0,0,20,20" 
+                                    Margin="0,0,0,0" 
+                                    MaxHeight="200"
+                                    ClipToBounds="True">
+
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" ClipToBounds="True">
+                                        <ListBox ItemsSource="{Binding Suggestions}"
+                                                 SelectionMode="Single"
+                                                 Background="Transparent"
+                                                 Foreground="{DynamicResource TextColor}"
+                                                 BorderThickness="0">
+
+                                            <ListBox.ItemContainerStyle>
+                                                <Style TargetType="{x:Type ListBoxItem}">
+                                                    <Setter Property="Padding" Value="10,5"/>
+                                                    <Setter Property="Cursor" Value="Hand"/>
+                                                    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                                    <Setter Property="BorderThickness" Value="0" />
+
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                                                <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="true">
+                                                                    <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+
+                                                    <EventSetter Event="UIElement.PreviewMouseLeftButtonDown" Handler="Suggestion_PreviewMouseLeftButtonDown"/>
+                                                    <EventSetter Event="UIElement.KeyDown" Handler="Suggestion_KeyDown"/>
+
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
+                                                        </Trigger>
+                                                        <Trigger Property="IsSelected" Value="True">
+                                                            <Setter Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
+                                                        </Trigger>
+
+                                                        <MultiTrigger>
+                                                            <MultiTrigger.Conditions>
+                                                                <Condition Property="IsSelected" Value="True"/>
+                                                                <Condition Property="IsFocused" Value="False"/>
+                                                            </MultiTrigger.Conditions>
+                                                            <Setter Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
+                                                            <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
+                                                        </MultiTrigger>
+
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ListBox.ItemContainerStyle>
+                                        </ListBox>
+                                    </ScrollViewer>
+
+                                    <Border Grid.Row="1" 
+                                        BorderBrush="{DynamicResource ControlBorderColor}" 
+                                        BorderThickness="0,1,0,0" Padding="0,4,10,4">
+                                        <TextBlock Text="Arama önerileri" 
+                                           HorizontalAlignment="Right"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource GrayTextColor}" />
+                                    </Border>
+
+                                </Grid>
                             </Border>
                         </Popup>
                     </Grid>
-
                     <Expander Header="Arama İpuçları" Margin="0,20,0,0" FontSize="11" 
                               Foreground="{DynamicResource GrayTextColor}" HorizontalAlignment="Center" Width="500">
                         <Border Background="{DynamicResource ControlBackgroundColor}" CornerRadius="3" Padding="8" 
@@ -252,25 +429,43 @@
                         <StackPanel Orientation="Horizontal">
                             <Image Source="icons/logo.png" Height="60" Margin="0,0,19,0" VerticalAlignment="Center" />
                             <Grid Height="40" MinWidth="400" MaxWidth="600" VerticalAlignment="Center">
-                                <Border CornerRadius="20" Background="{DynamicResource TextBoxBackgroundColor}" 
-                                        BorderBrush="{DynamicResource ControlBorderColor}" BorderThickness="1" 
+                                <Border x:Name="SearchBorderPost" BorderBrush="{DynamicResource ControlBorderColor}" 
+                                        BorderThickness="1" 
+                                        Background="{DynamicResource TextBoxBackgroundColor}"
                                         VerticalAlignment="Top">
+
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="CornerRadius" Value="20" />
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsSuggestionsOpen}" Value="True" />
+                                                        <Condition Binding="{Binding IsSearchPerformed}" Value="True" />
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="CornerRadius" Value="20,20,0,0" />
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+
                                     <Grid Height="40" Margin="-1,0,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <TextBox x:Name="SearchTextBoxPost" Grid.Column="0" 
-                                                 Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
-                                                 BorderThickness="0" Background="Transparent" 
-                                                 VerticalAlignment="Center" Margin="21,0,0,0" FontSize="16"
-                                                 Foreground="{DynamicResource TextColor}"
-                                                 CaretBrush="{DynamicResource TextColor}">
+                 Text="{Binding Query, UpdateSourceTrigger=PropertyChanged}"
+                 BorderThickness="0" Background="Transparent" 
+                 VerticalAlignment="Center" Margin="21,0,0,0" FontSize="16"
+                 Foreground="{DynamicResource TextColor}"
+                 CaretBrush="{DynamicResource TextColor}">
                                             <TextBox.InputBindings>
                                                 <KeyBinding Key="Enter" Command="{Binding SearchCommand}" />
                                                 <KeyBinding Key="Down" Command="ApplicationCommands.NotACommand" />
                                             </TextBox.InputBindings>
                                         </TextBox>
+
                                         <Button Grid.Column="1" Content="&#xE721;" FontFamily="Segoe MDL2 Assets"
                                                 Style="{StaticResource SearchButton}" 
                                                 Command="{Binding SearchCommand}" Margin="0,0,10,0" />
@@ -278,9 +473,13 @@
                                 </Border>
 
                                 <Popup x:Name="SuggestionPopupPost"
-                                       PlacementTarget="{Binding ElementName=SearchTextBoxPost}"
+                                       PlacementTarget="{Binding ElementName=SearchBorderPost}"
                                        Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
-                                       Width="{Binding ElementName=SearchTextBoxPost, Path=ActualWidth}">
+                                       Width="{Binding ElementName=SearchBorderPost, Path=ActualWidth}"
+                                       VerticalOffset="1"
+       
+                                       Closed="SuggestionPopup_Closed">
+
                                     <Popup.Style>
                                         <Style TargetType="Popup">
                                             <Setter Property="IsOpen" Value="False" />
@@ -295,45 +494,103 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Popup.Style>
-                                    <Border Background="{DynamicResource PreviewBackgroundColor}" 
+
+                                    <Border Background="{DynamicResource TextBoxBackgroundColor}" 
                                             BorderBrush="{DynamicResource ControlBorderColor}"
-                                            BorderThickness="1" CornerRadius="5" Margin="0,2,0,0" MaxHeight="200">
-                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                            <ListBox ItemsSource="{Binding Suggestions}"
-                                                     SelectionMode="Single" Background="Transparent" Foreground="{DynamicResource TextColor}">
-                                                <ListBox.ItemContainerStyle>
-                                                    <Style TargetType="ListBoxItem">
-                                                        <Setter Property="Padding" Value="10,5"/>
-                                                        <Setter Property="Cursor" Value="Hand"/>
-                                                        <EventSetter Event="PreviewMouseLeftButtonDown" Handler="Suggestion_PreviewMouseLeftButtonDown"/>
-                                                        <EventSetter Event="KeyDown" Handler="Suggestion_KeyDown"/>
-                                                        <Style.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
-                                                                <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
-                                                            </Trigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </ListBox.ItemContainerStyle>
-                                            </ListBox>
-                                        </ScrollViewer>
+                                            BorderThickness="1,0,1,1" 
+                                            CornerRadius="0,0,20,20" 
+                                            Margin="0,0,0,0" 
+                                            MaxHeight="200"
+                                            ClipToBounds="True">
+
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+
+                                            <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" ClipToBounds="True">
+                                                <ListBox ItemsSource="{Binding Suggestions}"
+                                                         SelectionMode="Single" Background="Transparent" Foreground="{DynamicResource TextColor}" BorderThickness="0">
+
+                                                    <ListBox.ItemContainerStyle>
+                                                        <Style TargetType="{x:Type ListBoxItem}">
+                                                            <Setter Property="Padding" Value="10,5"/>
+                                                            <Setter Property="Cursor" Value="Hand"/>
+                                                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                                                            <Setter Property="BorderThickness" Value="0" />
+
+                                                            <Setter Property="Template">
+                                                                <Setter.Value>
+                                                                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                                                        <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="true">
+                                                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                                                        </Border>
+                                                                    </ControlTemplate>
+                                                                </Setter.Value>
+                                                            </Setter>
+
+                                                            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="Suggestion_PreviewMouseLeftButtonDown"/>
+                                                            <EventSetter Event="KeyDown" Handler="Suggestion_KeyDown"/>
+
+                                                            <Style.Triggers>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
+                                                                    <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsSelected" Value="True">
+                                                                    <Setter Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
+                                                                    <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
+                                                                </Trigger>
+
+                                                                <MultiTrigger>
+                                                                    <MultiTrigger.Conditions>
+                                                                        <Condition Property="IsSelected" Value="True"/>
+                                                                        <Condition Property="IsFocused" Value="False"/>
+                                                                    </MultiTrigger.Conditions>
+                                                                    <Setter Property="Background" Value="{DynamicResource MenuItemHoverBackgroundColor}"/>
+                                                                    <Setter Property="Foreground" Value="{DynamicResource MenuItemHoverTextColor}"/>
+                                                                </MultiTrigger>
+
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </ListBox.ItemContainerStyle>
+                                                </ListBox>
+                                            </ScrollViewer>
+
+                                            <Border Grid.Row="1" 
+                                                BorderBrush="{DynamicResource ControlBorderColor}" 
+                                                BorderThickness="0,1,0,0" Padding="0,4,10,4">
+                                                <TextBlock Text="Arama önerileri" 
+                                                   HorizontalAlignment="Right"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource GrayTextColor}" />
+                                            </Border>
+
+                                        </Grid>
                                     </Border>
                                 </Popup>
                             </Grid>
                         </StackPanel>
-
                         <Expander Header="Arama İpuçları" Margin="0,8,0,0" FontSize="11" 
                                   Foreground="{DynamicResource GrayTextColor}" HorizontalAlignment="Left" MaxWidth="500">
                             <Border Background="{DynamicResource ControlBackgroundColor}" CornerRadius="3" Padding="8" 
                                     BorderBrush="{DynamicResource BorderColor}" BorderThickness="1">
                                 <TextBlock FontFamily="Consolas" LineHeight="18" TextWrapping="Wrap"
-           Foreground="{DynamicResource TextColor}">
-    <Run Text="🔹" FontWeight="Bold" /><Run Text=" "/><Run Text=" "/><Run Text=" "/><Run Text="ara*" /><Run Text=": 'ara' ile başlayan kelimeler."/><LineBreak />
-    <Run Text="🔹" FontWeight="Bold" /><Run Text=" "/><Run Text=" "/><Run Text=" "/><Run Text="ara AND bilgi" /><Run Text=": 'ara' VE 'bilgi' kelimelerini içerenler."/><LineBreak />
-    <Run Text="🔹" FontWeight="Bold" /><Run Text=" "/><Run Text=" "/><Run Text=" "/><Run Text="ara OR bilgi" /><Run Text=": 'ara' VEYA 'bilgi' kelimelerinden birini içerenler."/><LineBreak />
-    <Run Text="🔹" FontWeight="Bold" /><Run Text=" "/><Run Text=" "/><Run Text=" "/><Run Text="&quot;tam metin grubu&quot;" /><Run Text=": Tam olarak bu ifadeyi arar."/><LineBreak />
-    <Run Text="🔹" FontWeight="Bold" /><Run Text=" "/><Run Text=" "/><Run Text=" "/><Run Text="ext:pdf" /><Run Text=": Sadece PDF uzantılı dosyaları arar."/><LineBreak />
-    <Run Text="Daha fazlası için 'Yardım' menüsüne bakın."/>
+                                           Foreground="{DynamicResource TextColor}">
+                                <Run Text="🔹" FontWeight="Bold" /><Run Text=" "/><Run Text=" "/><Run Text=" "/><Run Text="ara*" /><Run Text=": 'ara' ile başlayan kelimeler."/><LineBreak />
+                                <Run Text="🔹" FontWeight="Bold" /><Run Text=" "/><Run Text=" "/><Run Text=" "/><Run Text="ara AND bilgi" /><Run Text=": 'ara' VE 'bilgi' kelimelerini içerenler."/><LineBreak />
+                                <Run Text="🔹" FontWeight="Bold" /><Run Text=" "/><Run Text=" "/><Run Text=" "/><Run Text="ara OR bilgi" /><Run Text=": 'ara' VEYA 'bilgi' kelimelerinden birini içerenler."/><LineBreak />
+                                <Run Text="🔹" FontWeight="Bold" /><Run Text=" "/><Run Text=" "/><Run Text=" "/><Run Text="&quot;tam metin grubu&quot;" /><Run Text=": Tam olarak bu ifadeyi arar."/><LineBreak />
+                                <Run Text="🔹" FontWeight="Bold" /><Run Text=" "/><Run Text=" "/><Run Text=" "/><Run Text="ext:pdf" /><Run Text=": Sadece PDF uzantılı dosyaları arar."/><LineBreak />
+                                <Run Text="Daha fazlası için 'Yardım' menüsüne bakın."/>
                                 </TextBlock>
                             </Border>
                         </Expander>
@@ -356,29 +613,58 @@
                             </Grid.RowDefinitions>
                             <TextBlock Grid.Row="0" Text="Arama Sonuçları" FontWeight="Bold" Margin="5,9,0,4" 
                                        Foreground="{DynamicResource TextColor}"/>
-                            <ListView Grid.Row="1"
-                                      ItemsSource="{Binding SearchResults}"
+
+                            <DataGrid Grid.Row="1"
+                                      x:Name="SearchResultsDataGridRight" ItemsSource="{Binding SearchResults}"
                                       SelectedItem="{Binding SelectedSearchResult}"
-                                      Margin="0,4,0,0"
                                       MouseDoubleClick="SearchResultsListView_MouseDoubleClick"
+                                      AutoGenerateColumns="False"
+                                      CanUserSortColumns="True"
+                                      CanUserResizeColumns="True"
+                                      IsReadOnly="True"
+                                      Margin="0,4,0,0"
                                       Background="{DynamicResource WindowBackgroundColor}"
                                       BorderBrush="{DynamicResource BorderColor}"
-                                      Foreground="{DynamicResource TextColor}">
-                                <ListView.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="Dosya Konumunu Aç" Command="{Binding OpenFileLocationCommand}"/>
+                                      Foreground="{DynamicResource TextColor}"
+                                      RowStyle="{StaticResource DataGridRowStyle}"
+                                      CellStyle="{StaticResource DataGridCellStyle}"
+                                      ColumnHeaderStyle="{StaticResource DataGridColumnHeaderStyle}"
+                                      
+                                      GridLinesVisibility="None"
+                                      HeadersVisibility="Column"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Auto">
+
+                                <DataGrid.InputBindings>
+                                    <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyFileCommand}"/>
+                                </DataGrid.InputBindings>
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                                 Style="{StaticResource DataGridContextMenuStyle}">
+
+                                        <MenuItem Header="Dosyayı Kopyala" Command="{Binding CopyFileCommand}"
+                                                  Style="{DynamicResource {x:Type MenuItem}}"/>
+                                        <MenuItem Header="Dosya Konumunu Aç" Command="{Binding OpenFileLocationCommand}"
+                                                  Style="{DynamicResource {x:Type MenuItem}}"/>
                                     </ContextMenu>
-                                </ListView.ContextMenu>
-                                <ListView.View>
-                                    <GridView>
-                                        <GridViewColumn Header="Dosya Adı" DisplayMemberBinding="{Binding FileName}" Width="250"/>
-                                        <GridViewColumn Header="Tür" DisplayMemberBinding="{Binding Extension}" Width="60"/>
-                                        <GridViewColumn Header="Boyut" DisplayMemberBinding="{Binding Size, Converter={StaticResource FileSizeConverter}}" Width="80"/>
-                                        <GridViewColumn Header="İndeks Adı" DisplayMemberBinding="{Binding IndexName}" Width="150"/>
-                                        <GridViewColumn Header="Yol" DisplayMemberBinding="{Binding Path}" Width="700"/>
-                                    </GridView>
-                                </ListView.View>
-                            </ListView>
+                                </DataGrid.ContextMenu>
+
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Header="" CanUserSort="False" CanUserResize="False" Width="Auto">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Image Source="{Binding FileIcon}" Width="16" Height="16" Margin="4,0" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Dosya Adı" Binding="{Binding FileName}" SortMemberPath="FileName" Width="250"/>
+                                    <DataGridTextColumn Header="Tür" Binding="{Binding FileType}" SortMemberPath="FileType" Width="120"/>
+                                    <DataGridTextColumn Header="Boyut" Binding="{Binding Size, Converter={StaticResource FileSizeConverter}}" SortMemberPath="Size" Width="100"/>
+                                    <DataGridTextColumn Header="Tarih" Binding="{Binding ModificationDate, StringFormat='g'}" SortMemberPath="ModificationDate" Width="140"/>
+                                    <DataGridTextColumn Header="Index Adı" Binding="{Binding IndexName}" SortMemberPath="IndexName" Width="120"/>
+                                    <DataGridTextColumn Header="Yol" Binding="{Binding DirectoryPath}" SortMemberPath="DirectoryPath" Width="400"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
                         </Grid>
 
                         <GridSplitter Grid.Column="1" Width="5" 
@@ -391,8 +677,35 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Text="Önizleme" FontWeight="Bold" Margin="5,9,0,4" 
-                                       Foreground="{DynamicResource TextColor}"/>
+                            <Border Grid.Row="0" MinHeight="33" Background="Transparent" Margin="0,5,0,0">
+                                <Grid Margin="5,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="Önizleme" FontWeight="Bold" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                                        <TextBlock Text="-" Margin="5,0" FontWeight="Bold" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"
+                                                   Visibility="{Binding SelectedSearchResult, Converter={StaticResource NullToVisibilityConverter}, FallbackValue=Collapsed}"/>
+                                        <TextBlock Text="{Binding SelectedSearchResult.FileName, FallbackValue=''}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextColor}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button Command="{Binding OpenContainingFolderCommand}" ToolTip="Dosya konumunu aç"
+                                                Style="{StaticResource IconButtonStyle}">
+                                            <Path Data="M10,4H4C2.89,4 2,4.89 2,6V18C2,19.1 2.89,20 4,20H20C21.1,20 22,19.1 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Width="16" Height="16" Stretch="Uniform"/>
+                                        </Button>
+                                        <Button Command="{Binding CopyFileCommand}" ToolTip="Dosyayı panoya kopyala"
+                                                Style="{StaticResource IconButtonStyle}" Margin="5,0,0,0">
+                                            <Path Data="M16,1H4C2.9,1 2,1.9 2,3V17H4V3H16V1ZM19,5H8C6.9,5 6,5.9 6,7V21C6,22.1 6.9,23 8,23H19C20.1,23 21,22.1 21,21V7C21,5.9 20.1,5 19,5ZM19,21H8V7H19V21Z"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Width="16" Height="16" Stretch="Uniform"/>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
 
                             <Border Grid.Row="1" Background="{DynamicResource PreviewBackgroundColor}" 
                                     BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
@@ -448,29 +761,58 @@
                             </Grid.RowDefinitions>
                             <TextBlock Grid.Row="0" Text="Arama Sonuçları" FontWeight="Bold" 
                                        Foreground="{DynamicResource TextColor}"/>
-                            <ListView Grid.Row="1"
-                                      ItemsSource="{Binding SearchResults}"
+
+                            <DataGrid Grid.Row="1"
+                                      x:Name="SearchResultsDataGridBottom" ItemsSource="{Binding SearchResults}"
                                       SelectedItem="{Binding SelectedSearchResult}"
-                                      Margin="0,4,0,0"
                                       MouseDoubleClick="SearchResultsListView_MouseDoubleClick"
+                                      AutoGenerateColumns="False"
+                                      CanUserSortColumns="True"
+                                      CanUserResizeColumns="True"
+                                      IsReadOnly="True"
+                                      Margin="0,4,0,0"
                                       Background="{DynamicResource WindowBackgroundColor}"
                                       BorderBrush="{DynamicResource BorderColor}"
-                                      Foreground="{DynamicResource TextColor}">
-                                <ListView.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="Dosya Konumunu Aç" Command="{Binding OpenFileLocationCommand}"/>
+                                      Foreground="{DynamicResource TextColor}"
+                                      RowStyle="{StaticResource DataGridRowStyle}"
+                                      CellStyle="{StaticResource DataGridCellStyle}"
+                                      ColumnHeaderStyle="{StaticResource DataGridColumnHeaderStyle}"
+                                      
+                                      GridLinesVisibility="None"
+                                      HeadersVisibility="Column"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Auto">
+
+                                <DataGrid.InputBindings>
+                                    <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyFileCommand}"/>
+                                </DataGrid.InputBindings>
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
+                                                 Style="{StaticResource DataGridContextMenuStyle}">
+
+                                        <MenuItem Header="Dosyayı Kopyala" Command="{Binding CopyFileCommand}"
+                                                  Style="{DynamicResource {x:Type MenuItem}}"/>
+                                        <MenuItem Header="Dosya Konumunu Aç" Command="{Binding OpenFileLocationCommand}"
+                                                  Style="{DynamicResource {x:Type MenuItem}}"/>
                                     </ContextMenu>
-                                </ListView.ContextMenu>
-                                <ListView.View>
-                                    <GridView>
-                                        <GridViewColumn Header="Dosya Adı" DisplayMemberBinding="{Binding FileName}" Width="250"/>
-                                        <GridViewColumn Header="Tür" DisplayMemberBinding="{Binding Extension}" Width="60"/>
-                                        <GridViewColumn Header="Boyut" DisplayMemberBinding="{Binding Size, Converter={StaticResource FileSizeConverter}}" Width="80"/>
-                                        <GridViewColumn Header="İndeks Adı" DisplayMemberBinding="{Binding IndexName}" Width="150"/>
-                                        <GridViewColumn Header="Yol" DisplayMemberBinding="{Binding Path}" Width="700"/>
-                                    </GridView>
-                                </ListView.View>
-                            </ListView>
+                                </DataGrid.ContextMenu>
+
+                                <DataGrid.Columns>
+                                    <DataGridTemplateColumn Header="" CanUserSort="False" CanUserResize="False" Width="Auto">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Image Source="{Binding FileIcon}" Width="16" Height="16" Margin="4,0" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                    <DataGridTextColumn Header="Dosya Adı" Binding="{Binding FileName}" SortMemberPath="FileName" Width="250"/>
+                                    <DataGridTextColumn Header="Tür" Binding="{Binding FileType}" SortMemberPath="FileType" Width="120"/>
+                                    <DataGridTextColumn Header="Boyut" Binding="{Binding Size, Converter={StaticResource FileSizeConverter}}" SortMemberPath="Size" Width="100"/>
+                                    <DataGridTextColumn Header="Tarih" Binding="{Binding ModificationDate, StringFormat='g'}" SortMemberPath="ModificationDate" Width="140"/>
+                                    <DataGridTextColumn Header="Index Adı" Binding="{Binding IndexName}" SortMemberPath="IndexName" Width="120"/>
+                                    <DataGridTextColumn Header="Yol" Binding="{Binding DirectoryPath}" SortMemberPath="DirectoryPath" Width="400"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
                         </Grid>
 
                         <GridSplitter Grid.Row="1" Height="5" 
@@ -483,13 +825,39 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Text="Önizleme" FontWeight="Bold" Margin="0,0,0,4" 
-                                       Foreground="{DynamicResource TextColor}"/>
+                            <Border Grid.Row="0" MinHeight="33" Background="Transparent" Margin="0,5,0,0">
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock Text="Önizleme" FontWeight="Bold" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"/>
+                                        <TextBlock Text="-" Margin="5,0" FontWeight="Bold" VerticalAlignment="Center" Foreground="{DynamicResource TextColor}"
+                                                   Visibility="{Binding SelectedSearchResult, Converter={StaticResource NullToVisibilityConverter}, FallbackValue=Collapsed}"/>
+                                        <TextBlock Text="{Binding SelectedSearchResult.FileName, FallbackValue=''}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" Foreground="{DynamicResource TextColor}"/>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                        <Button Command="{Binding OpenContainingFolderCommand}" ToolTip="Dosya konumunu aç"
+                                                Style="{StaticResource IconButtonStyle}">
+                                            <Path Data="M10,4H4C2.89,4 2,4.89 2,6V18C2,19.1 2.89,20 4,20H20C21.1,20 22,19.1 22,18V8C22,6.89 21.1,6 20,6H12L10,4Z"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Width="16" Height="16" Stretch="Uniform"/>
+                                        </Button>
+                                        <Button Command="{Binding CopyFileCommand}" ToolTip="Dosyayı panoya kopyala"
+                                                Style="{StaticResource IconButtonStyle}" Margin="5,0,0,0">
+                                            <Path Data="M16,1H4C2.9,1 2,1.9 2,3V17H4V3H16V1ZM19,5H8C6.9,5 6,5.9 6,7V21C6,22.1 6.9,23 8,23H19C20.1,23 21,22.1 21,21V7C21,5.9 20.1,5 19,5ZM19,21H8V7H19V21Z"
+                                                  Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Width="16" Height="16" Stretch="Uniform"/>
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
 
                             <Border Grid.Row="1" Background="{DynamicResource PreviewBackgroundColor}" 
                                     BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
-                                    Margin="0,4,0,0" Padding="40">
-
+                                    Margin="0,4,0,0" Padding="5">
                                 <Grid>
                                     <wv2:WebView2 x:Name="WebViewerBottom"
                                                   Visibility="{Binding WebViewPreviewVisibility}"
