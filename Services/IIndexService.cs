@@ -34,6 +34,6 @@ namespace WpfIndexer.Services
         Task<string> GetContentByPathAsync(string indexPath, string filePath);
 
         // YENİ METOT: İndeksten tarihleri okumak için
-        (DateTime? CreationDate, DateTime? LastUpdateDate) GetIndexMetadata(string indexPath);
+        StoredIndexMetadata? GetIndexMetadata(string indexPath);
     }
 }

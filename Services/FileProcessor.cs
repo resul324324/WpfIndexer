@@ -634,7 +634,7 @@ namespace WpfIndexer.Services
             switch (quality)
             {
                 case OcrQuality.Low:
-                    return (Dpi: 150, Lang: "tur", Mode: EngineMode.TesseractOnly);
+                    return (Dpi: 150, Lang: "tur", Mode: EngineMode.Default);
 
                 case OcrQuality.Balanced:
                     return (Dpi: 250, Lang: "tur", Mode: EngineMode.Default);

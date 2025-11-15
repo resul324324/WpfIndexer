@@ -424,7 +424,7 @@
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0" Background="{DynamicResource WindowBackgroundColor}" Padding="10,5,10,10" 
-                        BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,5">
+                        BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,0,0">
                     <StackPanel Orientation="Vertical">
                         <StackPanel Orientation="Horizontal">
                             <Image Source="icons/logo.png" Height="60" Margin="0,0,19,0" VerticalAlignment="Center" />
@@ -622,7 +622,7 @@
                                       CanUserSortColumns="True"
                                       CanUserResizeColumns="True"
                                       IsReadOnly="True"
-                                      Margin="0,4,0,0"
+                                      Margin="0,9,0,0"
                                       Background="{DynamicResource WindowBackgroundColor}"
                                       BorderBrush="{DynamicResource BorderColor}"
                                       Foreground="{DynamicResource TextColor}"
@@ -653,7 +653,7 @@
                                     <DataGridTemplateColumn Header="" CanUserSort="False" CanUserResize="False" Width="Auto">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <Image Source="{Binding FileIcon}" Width="16" Height="16" Margin="4,0" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                <Image Source="{Binding FileIcon}" Width="16" Height="24" Margin="4,0" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
@@ -667,9 +667,9 @@
                             </DataGrid>
                         </Grid>
 
-                        <GridSplitter Grid.Column="1" Width="5" 
-                                      HorizontalAlignment="Center" VerticalAlignment="Stretch" 
-                                      Background="{DynamicResource BorderColor}" Margin="4,0" />
+                        <GridSplitter Grid.Column="1" Width="10"
+              HorizontalAlignment="Center" VerticalAlignment="Stretch"
+              Background="Transparent" Margin="6,0" />
 
                         <Grid Grid.Column="2">
                             <Grid.RowDefinitions>
@@ -709,7 +709,7 @@
 
                             <Border Grid.Row="1" Background="{DynamicResource PreviewBackgroundColor}" 
                                     BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
-                                    Margin="0,4,0,0" Padding="5">
+                                    Margin="0,0,0,0" Padding="10">
                                 <Grid>
                                     <wv2:WebView2 x:Name="WebViewerRight"
                                                   Visibility="{Binding WebViewPreviewVisibility}"
@@ -801,7 +801,7 @@
                                     <DataGridTemplateColumn Header="" CanUserSort="False" CanUserResize="False" Width="Auto">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
-                                                <Image Source="{Binding FileIcon}" Width="16" Height="16" Margin="4,0" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                                <Image Source="{Binding FileIcon}" Width="16" Height="24" Margin="4,0" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
@@ -810,14 +810,14 @@
                                     <DataGridTextColumn Header="Boyut" Binding="{Binding Size, Converter={StaticResource FileSizeConverter}}" SortMemberPath="Size" Width="100"/>
                                     <DataGridTextColumn Header="Tarih" Binding="{Binding ModificationDate, StringFormat='g'}" SortMemberPath="ModificationDate" Width="140"/>
                                     <DataGridTextColumn Header="Index Adı" Binding="{Binding IndexName}" SortMemberPath="IndexName" Width="120"/>
-                                    <DataGridTextColumn Header="Yol" Binding="{Binding DirectoryPath}" SortMemberPath="DirectoryPath" Width="400"/>
+                                    <DataGridTextColumn Header="Yol" Binding="{Binding DirectoryPath}" SortMemberPath="DirectoryPath" Width="*"/>
                                 </DataGrid.Columns>
                             </DataGrid>
                         </Grid>
 
-                        <GridSplitter Grid.Row="1" Height="5" 
+                        <GridSplitter Grid.Row="1" Height="10" 
                                       HorizontalAlignment="Stretch" VerticalAlignment="Center" 
-                                      Background="{DynamicResource BorderColor}" Margin="0,4" />
+                                      Background="Transparent" Margin="0,5,0,0" />
 
                         <Grid Grid.Row="2">
                             <Grid.RowDefinitions>

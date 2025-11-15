@@ -22,12 +22,14 @@ namespace WpfIndexer.Services
             "indexes.json");
 
         private readonly ILogger<IndexSettingsService> _logger;
+        private readonly IIndexService _indexService;
 
         public ObservableCollection<IndexDefinition> Indexes { get; } = new();
 
-        public IndexSettingsService(ILogger<IndexSettingsService> logger)
+        public IndexSettingsService(ILogger<IndexSettingsService> logger, IIndexService indexService) // <-- indexService parametresini ekleyin
         {
             _logger = logger;
+            _indexService = indexService; // <-- YENİ ATIYI EKLEYİN
             LoadIndexes();
         }
 
@@ -90,29 +92,45 @@ namespace WpfIndexer.Services
         /// <summary>
         /// Mevcut bir indeks klasörünü doğrular ve ekler.
         /// </summary>
+        // IndexSettingsService.cs içindeki metot
         public void AddExistingIndex(string indexPath)
         {
-            if (!Directory.EnumerateFiles(indexPath, "segments.*").Any())
+            var indexName = Path.GetFileName(indexPath);
+            if (string.IsNullOrEmpty(indexName))
             {
-                MessageBox.Show("Bu klasör geçerli bir Lucene indeks klasörü değil. 'segments.*' dosyaları bulunamadı.", "Hata", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-            if (Indexes.Any(i => i.IndexPath == indexPath))
-            {
-                MessageBox.Show("Bu indeks zaten eklenmiş.", "Hata", MessageBoxButton.OK, MessageBoxImage.Warning);
+                _logger.LogWarning("Geçersiz indexPath: {IndexPath}", indexPath);
                 return;
             }
 
-            var indexName = new DirectoryInfo(indexPath).Name;
+            if (Indexes.Any(i => i.IndexPath.Equals(indexPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                _logger.LogWarning("Bu indeks zaten listede: {IndexPath}", indexPath);
+                return;
+            }
+
+            // --- ÖNEMLİ DEĞİŞİKLİK BURADA ---
+            // Adım 4'te yazdığımız metodu kullanarak ayarları indeksten oku
+            var storedSettings = _indexService.GetIndexMetadata(indexPath);
+
             var newIndex = new IndexDefinition
             {
                 Name = indexName,
                 IndexPath = indexPath,
-                SourcePath = null, // Kaynak yolu bilinmiyor (güncellenemez)
+
+                // Ayarları indeksten al (bulamazsa varsayılan kullanır)
+                SourcePath = storedSettings?.SourcePath, // Artık SourcePath'i biliyoruz!
+                OcrQuality = storedSettings?.OcrQuality ?? OcrQuality.Off,
+                Extensions = storedSettings?.Extensions ?? new List<string>(),
+
+                // Meta verileri de UI'da göstermek için yüklüyoruz
+                CreationDate = storedSettings?.CreationDate,
+                LastUpdateDate = storedSettings?.LastUpdateDate,
+
                 IsSelected = true
             };
+            // --- DEĞİŞİKLİK BİTTİ ---
 
-            AddIndex(newIndex);
+            AddIndex(newIndex); // (Bu sizin özel metodunuz, listeye ekler)
             _logger.LogInformation("Mevcut indeks eklendi: {IndexName}", indexName);
         }
 

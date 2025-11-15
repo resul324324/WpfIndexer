@@ -14,6 +14,7 @@ using Lucene.Net.Util;
 using SharpCompress.Archives;
 using SharpCompress.Common;
 using WpfIndexer.Models;
+using Microsoft.Extensions.Logging;
 using Directory = System.IO.Directory;
 
 namespace WpfIndexer.Services
@@ -21,6 +22,7 @@ namespace WpfIndexer.Services
     public class LuceneIndexService : IIndexService
     {
         private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
+        private readonly ILogger<LuceneIndexService> _logger;
         private readonly HashSet<string> _archiveExtensions = new() { ".zip", ".rar", ".7z", ".tar" };
 
         private IndexWriter? _writer;
@@ -33,6 +35,10 @@ namespace WpfIndexer.Services
         private const int MaxLockAgeInMinutes = 60;
         // YENİ: Kilit dosyamızın adı
         private const string LockFileName = "wpfindexer.update.lock";
+        public LuceneIndexService(ILogger<LuceneIndexService> logger)
+        {
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
 
 
         private FileStream CreateLockFile(string indexPath)
@@ -192,15 +198,25 @@ namespace WpfIndexer.Services
                         _progress?.Report(new ProgressReportModel { Message = "İndeks diske yazılıyor (Flush)...", Current = _totalCount, Total = _totalCount, IsIndeterminate = true });
                         token.ThrowIfCancellationRequested();
 
-                        // YENİ: Meta verileri indekse yaz (Tarihleri UTC olarak sakla)
-                        var metadata = new Dictionary<string, string>
-                        {
-                            { "CreationDate", DateTime.UtcNow.ToString("o") }, // "o" = Round-trip format (ISO 8601)
+                        // Kaydedilecek tüm ayarları BİRLEŞTİR
+                        var commitData = new Dictionary<string, string>
+{
+                            // Asıl sorunu çözen ayarlar
+                            { "SourcePath", sourcePath },
+                            { "OcrQuality", ocrQuality.ToString() },
+                            { "Extensions", string.Join(";", extensionsToInclude) },
+
+                            // Sizin eklediğiniz tarih meta verileri
+                            { "CreationDate", DateTime.UtcNow.ToString("o") }, // "o" = Round-trip (ISO 8601)
                             { "LastUpdateDate", DateTime.UtcNow.ToString("o") }
                         };
-                        _writer.SetCommitData(metadata);
 
-                        _writer.Flush(true, true);
+                        // Veriyi bir sonraki commit'e ekle
+                        _writer.SetCommitData(commitData);
+
+                  
+                        _writer.Commit();
+                        
                     }
                 }).ConfigureAwait(false);
             }
@@ -343,17 +359,24 @@ namespace WpfIndexer.Services
                         _progress?.Report(new ProgressReportModel { Message = "Değişiklikler kaydediliyor...", Current = _totalCount, Total = _totalCount, IsIndeterminate = true });
                         token.ThrowIfCancellationRequested();
 
-                        // YENİ: Meta verileri güncelle (Oluşturma tarihini koru, UTC olarak sakla)
-                        var metadata = new Dictionary<string, string>
-                        {
-                            // 'CreationDate' okunamadıysa, bu güncelleme tarihini kullan
-                            // Okunduysa, UI'da göstermek için Local'e çevrilmişti, geri UTC'ye al.
-                            { "CreationDate", existingMetadata.CreationDate?.ToUniversalTime().ToString("o") ?? DateTime.UtcNow.ToString("o") },
-                            { "LastUpdateDate", DateTime.UtcNow.ToString("o") }
-                        };
-                        _writer.SetCommitData(metadata);
+                        _logger.LogInformation("Yeni indeks için ayarlar ve meta veriler kaydediliyor...");
 
-                        _writer.Flush(true, true);
+                        // Kaydedilecek tüm ayarları BİRLEŞTİR
+                        var commitData = new Dictionary<string, string>
+{
+                            // Asıl sorunu çözen ayarlar
+                            { "SourcePath", sourcePath },
+                            { "OcrQuality", ocrQuality.ToString() }, // <-- DÜZELTİLDİ (c ile)
+                            { "Extensions", string.Join(";", extensionsToInclude) },
+
+                            // Sizin eklediğiniz tarih meta verileri
+                            { "CreationDate", DateTime.UtcNow.ToString("o") },
+                            { "LastUpdateDate", DateTime.UtcNow.ToString("o") }
+};
+
+                        // Veriyi bir sonraki commit'e ekle ve commit'i zorla
+                        _writer.SetCommitData(commitData);
+                        _writer.Commit();
                     }
                 }).ConfigureAwait(false);
             }
@@ -521,42 +544,65 @@ namespace WpfIndexer.Services
         }
 
         // YENİ METOT: İndeksten meta verileri okur
-        public (DateTime? CreationDate, DateTime? LastUpdateDate) GetIndexMetadata(string indexPath)
+        // Adım 2'de IIndexService'te imzasını değiştirdiğimiz metodu burada uyguluyoruz.
+        public StoredIndexMetadata? GetIndexMetadata(string indexPath)
         {
+            // Bu metot diske eriştiği için try-catch bloğu zorunludur.
             try
             {
-                using var dir = FSDirectory.Open(indexPath);
-                if (!DirectoryReader.IndexExists(dir))
+                // Klasör kilitleme hatası almamak için FSDirectory.Open'ı using bloğuna alın
+                using var directory = FSDirectory.Open(indexPath);
+
+                if (!DirectoryReader.IndexExists(directory))
                 {
-                    return (null, null);
+                    _logger.LogWarning("GetIndexMetadata: {IndexPath} içinde indeks bulunamadı.", indexPath);
+                    return null;
                 }
 
-                using var reader = DirectoryReader.Open(dir);
-                // En son commit'in (yazma işleminin) meta verisini al
-                var commitData = reader.IndexCommit.UserData;
-
-                DateTime? creationDate = null;
-                DateTime? lastUpdateDate = null;
-
-                if (commitData.TryGetValue("CreationDate", out var creationDateStr))
+                // İndeksteki son "commit" (kayıt) işlemini bul
+                var commit = DirectoryReader.ListCommits(directory).LastOrDefault();
+                if (commit == null)
                 {
-                    // "o" formatında (ISO 8601) saklanan UTC tarihi oku
-                    if (DateTime.TryParse(creationDateStr, out var date))
-                        creationDate = date.ToLocalTime(); // UI'da göstermek için Local'e çevir
+                    _logger.LogWarning("GetIndexMetadata: {IndexPath} içinde commit bulunamadı.", indexPath);
+                    return null;
                 }
 
-                if (commitData.TryGetValue("LastUpdateDate", out var lastUpdateDateStr))
+                // Yazdığımız "UserData"yı al
+                var userData = commit.UserData;
+                if (userData == null || !userData.Any())
                 {
-                    if (DateTime.TryParse(lastUpdateDateStr, out var date))
-                        lastUpdateDate = date.ToLocalTime(); // UI'da göstermek için Local'e çevir
+                    _logger.LogWarning("GetIndexMetadata: {IndexPath} içinde ayar (UserData) bulunamadı. Bu muhtemelen eski bir indeks.", indexPath);
+                    return null; // Ayar kaydedilmemiş
                 }
 
-                return (creationDate, lastUpdateDate);
+                // Bulunan ayarları modelimize dök
+                var metadata = new StoredIndexMetadata();
+
+                if (userData.TryGetValue("SourcePath", out var sourcePath))
+                    metadata.SourcePath = sourcePath;
+
+                if (userData.TryGetValue("OcrQuality", out var ocrString) && Enum.TryParse<OcrQuality>(ocrString, out var ocrQuality))
+                    metadata.OcrQuality = ocrQuality;
+
+                if (userData.TryGetValue("Extensions", out var extString) && !string.IsNullOrEmpty(extString))
+                    metadata.Extensions = extString.Split(';', StringSplitOptions.RemoveEmptyEntries).ToList();
+
+                // Tarihleri okurken UTC'den LocalTime'a çevirmeyi bırakın,
+                // UTC (Round-trip "o") formatında saklayıp okumak en sağlıklısıdır.
+                if (userData.TryGetValue("CreationDate", out var creationDateStr) && DateTime.TryParse(creationDateStr, out var creationDate))
+                    metadata.CreationDate = creationDate; // Artık .ToLocalTime() demiyoruz
+
+                if (userData.TryGetValue("LastUpdateDate", out var lastUpdateDateStr) && DateTime.TryParse(lastUpdateDateStr, out var lastUpdateDate))
+                    metadata.LastUpdateDate = lastUpdateDate; // Artık .ToLocalTime() demiyoruz
+
+                _logger.LogInformation("Ayarlar {IndexPath} indeksinden başarıyla okundu.", indexPath);
+                return metadata;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // İndeks okunamazsa veya bozuksa
-                return (null, null);
+                // (örn: Kilitli dosya, bozuk indeks, klasör bulunamadı)
+                _logger.LogError(ex, "GetIndexMetadata: {IndexPath} okunurken kritik hata.", ex.Message);
+                return null;
             }
         }
 

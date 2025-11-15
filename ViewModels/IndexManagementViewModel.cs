@@ -71,13 +71,13 @@ namespace WpfIndexer.ViewModels
                     {
                         try
                         {
-                            var (creationDate, lastUpdateDate) = _indexService.GetIndexMetadata(index.IndexPath);
+                            var storedMetadata = _indexService.GetIndexMetadata(index.IndexPath);
 
                             // UI thread'ine geri dönerek ObservableCollection'ı güncelle
                             Application.Current.Dispatcher.Invoke(() =>
                             {
-                                index.CreationDate = creationDate;
-                                index.LastUpdateDate = lastUpdateDate;
+                                index.CreationDate = storedMetadata?.CreationDate;
+                                index.LastUpdateDate = storedMetadata?.LastUpdateDate;
                             });
                         }
                         catch (Exception ex)
