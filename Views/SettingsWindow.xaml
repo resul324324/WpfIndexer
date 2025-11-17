@@ -67,7 +67,7 @@
 
             <!-- Butonlar -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
-                <Button Content="Kaydet ve Kapat"
+                <Button Content="Kaydet"
                         Style="{StaticResource BrandButton}"
                         IsDefault="True"
                         Command="{Binding SaveAndCloseCommand}"

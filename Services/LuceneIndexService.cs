@@ -16,10 +16,12 @@ using SharpCompress.Common;
 using WpfIndexer.Models;
 using Microsoft.Extensions.Logging;
 using Directory = System.IO.Directory;
+using Lucene.Net.Search.Highlight; // Highlighter için
+using Lucene.Net.Analysis; // Analyzer ve TokenStream için
 
 namespace WpfIndexer.Services
 {
-    public class LuceneIndexService : IIndexService
+    public class LuceneIndexService : IIndexService, IDisposable
     {
         private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
         private readonly ILogger<LuceneIndexService> _logger;
@@ -474,97 +476,96 @@ namespace WpfIndexer.Services
             }
         }
 
-        // DİKKAT: Dönüş tipi Task<List<SearchResult>> -> Task<LuceneSearchResponse> olarak değişti
         public async Task<LuceneSearchResponse> SearchAsync(string query, IEnumerable<string> indexPaths, int maxResults)
         {
             // Orijinal 'await Task.Run' yapınızı koruyoruz,
             // sadece içerdeki dönüş tipini değiştiriyoruz.
             return await Task.Run(() =>
             {
-                // 1. YENİ: Yanıt nesnesi 'results' yerine 'response' oldu
+                // 1. YANIT NESNESİ
                 var response = new LuceneSearchResponse();
                 var paths = indexPaths.ToList();
                 if (string.IsNullOrWhiteSpace(query) || !paths.Any()) return response; // Boş yanıt dön
 
-                StandardAnalyzer? analyzer = null;
-                try
-                {
-                    analyzer = new StandardAnalyzer(AppLuceneVersion);
-                    var parser = new MultiFieldQueryParser(AppLuceneVersion,
-                     new[] { "filename", "content_index", "path" }, analyzer);
-
-
-                    // YENİ ÇÖZÜM: Başına * (joker) konulmuş aramaları etkinleştir
-                    parser.AllowLeadingWildcard = true;
-
-                    // Sizin mevcut sorgu mantığınız
-                    string finalQuery = query;
-                    bool isSpecialQuery = query.Contains("*") || query.Contains("?") || query.Contains("~") ||
-                                          query.Contains("\"") || query.ToUpper().Contains(" AND ") ||
-                                          query.ToUpper().Contains(" OR ") || query.ToUpper().Contains(" NOT ");
-                    if (!isSpecialQuery && query.Contains(" "))
+                // 2. ANALYZER'I 'using' BLOĞUNA AL
+                using (var analyzer = new StandardAnalyzer(AppLuceneVersion))
+                    try
                     {
-                        finalQuery = $"\"{query}\"";
-                    }
+                        var parser = new MultiFieldQueryParser(AppLuceneVersion,
+                         new[] { "filename", "content_index", "path" }, analyzer);
 
-                    var luceneQuery = parser.Parse(finalQuery);
+                        // Başına * (joker) konulmuş aramaları etkinleştir
+                        parser.AllowLeadingWildcard = true;
 
-                    // 2. YENİ: Oluşturulan Query nesnesini yanıta ata
-                    response.LuceneQuery = luceneQuery; // <-- Vurgulama için bu nesneyi dışarı taşıyoruz
-
-                    foreach (var path in paths)
-                    {
-                        var indexName = new DirectoryInfo(path).Name;
-
-                        var (reader, searcher) = GetCachedSearcher(path);
-
-                        var hits = searcher.Search(luceneQuery, maxResults).ScoreDocs;
-
-                        foreach (var hit in hits)
+                        // Sizin mevcut sorgu mantığınız
+                        string finalQuery = query;
+                        bool isSpecialQuery = query.Contains("*") || query.Contains("?") || query.Contains("~") ||
+                                              query.Contains("\"") || query.ToUpper().Contains(" AND ") ||
+                                              query.ToUpper().Contains(" OR ") || query.ToUpper().Contains(" NOT ");
+                        if (!isSpecialQuery && query.Contains(" "))
                         {
-                            var doc = searcher.Doc(hit.Doc);
-
-                            long.TryParse(doc.GetField("modified_date")?.GetStringValue(), out long ticks);
-                            long.TryParse(doc.Get("size"), out long size);
-
-                            string docPath = doc.Get("path_exact") ?? "";
-                            if (docPath.Length == 0) continue;
-
-                            response.Results.Add(new SearchResult
-                            {
-                                Path = docPath,
-                                FileName = doc.Get("filename") ?? System.IO.Path.GetFileName(docPath),
-                                Extension = doc.Get("extension") ?? System.IO.Path.GetExtension(docPath),
-                                IndexName = indexName,
-
-                                Size = size,
-                                Snippet = "",
-                                ModificationDate = (ticks > 0 ? new DateTime(ticks) : DateTime.MinValue),
-                                DirectoryPath = Path.GetDirectoryName(docPath) ?? docPath,
-                                FileType = "",
-                                FileIcon = null
-                            });
+                            finalQuery = $"\"{query}\"";
                         }
+
+                        var luceneQuery = parser.Parse(finalQuery);
+
+                        // Oluşturulan Query nesnesini yanıta ata
+                        response.LuceneQuery = luceneQuery; // <-- Vurgulama için bu nesneyi dışarı taşıyoruz
+
+                        foreach (var path in paths)
+                        {
+                            var indexName = new DirectoryInfo(path).Name;
+
+                            var (reader, searcher) = GetCachedSearcher(path);
+
+                            var hits = searcher.Search(luceneQuery, maxResults).ScoreDocs;
+
+                            foreach (var hit in hits)
+                            {
+                                var doc = searcher.Doc(hit.Doc);
+
+                                long.TryParse(doc.GetField("modified_date")?.GetStringValue(), out long ticks);
+                                long.TryParse(doc.Get("size"), out long size);
+
+                                string docPath = doc.Get("path_exact") ?? "";
+                                if (docPath.Length == 0) continue;
+
+                                response.Results.Add(new SearchResult
+                                {
+                                    Path = docPath,
+                                    FileName = doc.Get("filename") ?? System.IO.Path.GetFileName(docPath),
+                                    Extension = doc.Get("extension") ?? System.IO.Path.GetExtension(docPath),
+                                    IndexName = indexName,
+
+                                    Size = size,
+                                    Snippet = "",
+                                    ModificationDate = (ticks > 0 ? new DateTime(ticks) : DateTime.MinValue),
+                                    DirectoryPath = Path.GetDirectoryName(docPath) ?? docPath,
+                                    FileType = "",
+                                    FileIcon = null
+                                });
+                            }
+                        }
+
+                    }
+                    catch (ParseException pex)
+                    {
+                        _progress?.Report(new ProgressReportModel { Message = $"Hatalı Arama Sorgusu: {pex.Message}", IsIndeterminate = true });
+                        // Hata durumunda response.LuceneQuery null olacak, bu ViewModel tarafından kontrol edilecek.
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "SearchAsync hata: Query = {Query}", query);
+                        _progress?.Report(new ProgressReportModel { Message = $"Arama Hatası: {ex.Message}" });
                     }
 
-                }
-                catch (ParseException pex)
-                {
-                    _progress?.Report(new ProgressReportModel { Message = $"Hatalı Arama Sorgusu: {pex.Message}", IsIndeterminate = true });
-                    // Hata durumunda response.LuceneQuery null olacak, bu ViewModel tarafından kontrol edilecek.
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "SearchAsync hata: Query = {Query}", query);
-                    _progress?.Report(new ProgressReportModel { Message = $"Arama Hatası: {ex.Message}" });
-                }
+                    finally
+                    {
+                        // 5. 'finally' bloğundan analyzer?.Dispose() kaldırıldı,
+                        // çünkü 'using' bloğu bunu zaten yapıyor.
+                    }
 
-                finally
-                {
-                    analyzer?.Dispose();
-                }
-
-                // 4. YENİ: 'results' listesi yerine 'response' nesnesini dön
+                // 'results' listesi yerine 'response' nesnesini dön
                 return response;
             }).ConfigureAwait(false);
         }
@@ -675,6 +676,23 @@ namespace WpfIndexer.Services
                 _logger.LogError(ex, "GetIndexMetadata: {IndexPath} okunurken kritik hata.", ex.Message);
                 return null;
             }
+        }
+        public void Dispose()
+        {
+            _logger.LogInformation("LuceneIndexService dispose ediliyor. Reader cache temizleniyor...");
+            foreach (var reader in _readerCache.Values)
+            {
+                try
+                {
+                    reader.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Cache'deki reader dispose edilirken hata oluştu.");
+                }
+            }
+            _readerCache.Clear();
+            _searcherCache.Clear(); // Searcher'lar reader'a bağlı olduğu için ayrıca dispose etmeye gerek yok.
         }
 
         #region Helpers

@@ -627,7 +627,7 @@
                                       ScrollViewer.IsDeferredScrollingEnabled="True"
                                       RowHeight="28"
 
-                                      MouseDoubleClick="SearchResultsListView_MouseDoubleClick"
+                                      
                                       AutoGenerateColumns="False"
                                       CanUserSortColumns="True"
                                       CanUserResizeColumns="True"
@@ -647,6 +647,13 @@
 
                                 <DataGrid.InputBindings>
                                     <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyFileCommand}"/>
+                                    <MouseBinding MouseAction="LeftDoubleClick"
+                                          Command="{Binding OpenFileCommand}"
+                                          CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
+
+                                    <KeyBinding Key="Enter"
+                                        Command="{Binding OpenFileCommand}"
+                                        CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
                                 </DataGrid.InputBindings>
                                 <DataGrid.ContextMenu>
                                     <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
@@ -681,28 +688,6 @@
                                     <DataGridTextColumn Header="Boyut" Binding="{Binding Size, Converter={StaticResource FileSizeConverter}}" SortMemberPath="Size" Width="100"/>
                                     <DataGridTextColumn Header="Tarih" Binding="{Binding ModificationDate, StringFormat='g'}" SortMemberPath="ModificationDate" Width="140"/>
                                     <DataGridTextColumn Header="Index Adı" Binding="{Binding IndexName}" SortMemberPath="IndexName" Width="120"/>
-
-                                    <DataGridTemplateColumn Header="İçerik" Width="350">
-                                        <DataGridTemplateColumn.CellTemplate>
-                                            <DataTemplate>
-                                                <RichTextBox 
-                IsReadOnly="True"
-                BorderThickness="0"
-                Background="Transparent"
-                Foreground="{DynamicResource TextColor}"
-                FontSize="13"
-                VerticalScrollBarVisibility="Hidden"
-                HorizontalScrollBarVisibility="Hidden"
-                Padding="0">
-
-                                                    <helpers:RichTextBoxHelper.BoundDocument>
-                                                        <Binding Path="SnippetDocument" />
-                                                    </helpers:RichTextBoxHelper.BoundDocument>
-
-                                                </RichTextBox>
-                                            </DataTemplate>
-                                        </DataGridTemplateColumn.CellTemplate>
-                                    </DataGridTemplateColumn>
 
                                     <DataGridTextColumn Header="Yol" Binding="{Binding DirectoryPath}" SortMemberPath="DirectoryPath" Width="400"/>
 
@@ -818,7 +803,7 @@
                                       ScrollViewer.IsDeferredScrollingEnabled="True"
                                       RowHeight="28"
 
-                                      MouseDoubleClick="SearchResultsListView_MouseDoubleClick"
+                                      
                                       AutoGenerateColumns="False"
                                       CanUserSortColumns="True"
                                       CanUserResizeColumns="True"
@@ -838,6 +823,13 @@
 
                                 <DataGrid.InputBindings>
                                     <KeyBinding Key="C" Modifiers="Control" Command="{Binding CopyFileCommand}"/>
+                                    <MouseBinding MouseAction="LeftDoubleClick"
+                      Command="{Binding OpenFileCommand}"
+                      CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
+
+                                    <KeyBinding Key="Enter"
+                    Command="{Binding OpenFileCommand}"
+                    CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
                                 </DataGrid.InputBindings>
                                 <DataGrid.ContextMenu>
                                     <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"
@@ -872,27 +864,7 @@
                                     <DataGridTextColumn Header="Boyut" Binding="{Binding Size, Converter={StaticResource FileSizeConverter}}" SortMemberPath="Size" Width="100"/>
                                     <DataGridTextColumn Header="Tarih" Binding="{Binding ModificationDate, StringFormat='g'}" SortMemberPath="ModificationDate" Width="140"/>
                                     <DataGridTextColumn Header="Index Adı" Binding="{Binding IndexName}" SortMemberPath="IndexName" Width="120"/>
-                                    <DataGridTemplateColumn Header="İçerik" Width="350">
-                                        <DataGridTemplateColumn.CellTemplate>
-                                            <DataTemplate>
-                                                <RichTextBox 
-                IsReadOnly="True"
-                BorderThickness="0"
-                Background="Transparent"
-                Foreground="{DynamicResource TextColor}"
-                FontSize="13"
-                VerticalScrollBarVisibility="Hidden"
-                HorizontalScrollBarVisibility="Hidden"
-                Padding="0">
-
-                                                    <helpers:RichTextBoxHelper.BoundDocument>
-                                                        <Binding Path="SnippetDocument" />
-                                                    </helpers:RichTextBoxHelper.BoundDocument>
-
-                                                </RichTextBox>
-                                            </DataTemplate>
-                                        </DataGridTemplateColumn.CellTemplate>
-                                    </DataGridTemplateColumn>
+                                    
                                     <DataGridTextColumn Header="Yol" Binding="{Binding DirectoryPath}" SortMemberPath="DirectoryPath" Width="*"/>
                                 </DataGrid.Columns>
                             </DataGrid>

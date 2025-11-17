@@ -37,8 +37,7 @@ namespace WpfIndexer.Models
         /// </summary>
         [Browsable(false)]
         public ImageSource? FileIcon { get; set; }
-        // MADDE 18 – Snippet için FlowDocument
-        public FlowDocument? SnippetDocument { get; set; }
+        
 
 
         /// <summary>

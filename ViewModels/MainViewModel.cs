@@ -13,6 +13,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using OpenXmlPowerTools;
 using Serilog;
+using SharpCompress.Archives;
+using SharpCompress.Common;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -31,14 +33,15 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows; // Clipboard için EKLENDİ
+using System.Windows.Documents; // FlowDocument, Paragraph, Run
 using System.Windows.Input;
+using System.Windows.Media;     // Brushes
 using System.Xml.Linq;
 using WpfIndexer.Helpers; // ShellIconHelper için EKLENDİ (zaten vardı ama doğrulayalım)
 using WpfIndexer.Models;
 using WpfIndexer.Services;
 using WpfIndexer.Views;
-using System.Windows.Documents; // FlowDocument, Paragraph, Run
-using System.Windows.Media;     // Brushes
+
 
 
 [assembly: System.Runtime.Versioning.SupportedOSPlatform("windows")]
@@ -224,22 +227,14 @@ namespace WpfIndexer.ViewModels
         public ICommand ExportResultsCommand { get; }
         public ICommand ExitApplicationCommand { get; }
         public ICommand OpenViewSettingsCommand { get; }
+        public ICommand OpenFileCommand { get; }
 
-        // --- YENİ EKLENEN KOMUTLAR ---
-
-        /// <summary>
-        /// Seçili dosyayı panoya (CTRL+C) "dosya olarak" kopyalar.
-        /// </summary>
+       
         public ICommand CopyFileCommand { get; }
 
-        /// <summary>
-        /// Önizleme bölmesindeki "Dosya Konumunu Aç" butonu için.
-        /// </summary>
+        
         public ICommand OpenContainingFolderCommand { get; }
 
-        /// <summary>
-        /// Önizleme bölmesindeki "Kopyala" butonu için (Dosyayı kopyalar).
-        /// </summary>
         public ICommand CopyFileFromPreviewCommand { get; }
 
         // Constructor
@@ -288,7 +283,7 @@ namespace WpfIndexer.ViewModels
             // Bu komut, (isteğin üzerine) listedeki kopyalama ile aynı işi yapıyor.
             CopyFileFromPreviewCommand = new RelayCommand(_ => CopySelectedFile(), _ => SelectedSearchResult != null);
             // --- BİTTİ ---
-
+            OpenFileCommand = new RelayCommand(OpenFile, _ => SelectedSearchResult != null);
 
             _autoUpdateService.StatusChanged += (status) =>
             {
@@ -430,8 +425,6 @@ namespace WpfIndexer.ViewModels
                             item.FileType = item.Extension.TrimStart('.').ToUpper();
                             item.FileIcon = null;
                         }
-                        // MADDE 18 – Snippet FlowDocument üret
-                        item.SnippetDocument = BuildHighlightedSnippetDocument(item.Snippet);
 
                         SearchResults.Add(item);
                     }
@@ -1254,6 +1247,7 @@ namespace WpfIndexer.ViewModels
             (CopyFileCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (OpenContainingFolderCommand as RelayCommand)?.RaiseCanExecuteChanged();
             (CopyFileFromPreviewCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (OpenFileCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
 
         // --- INotifyPropertyChanged ---
@@ -1304,59 +1298,85 @@ namespace WpfIndexer.ViewModels
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
             }
         }
-        // =========================================================
-        // MADDE 18 – LIST SNIPPET → FLOWDOCUMENT DÖNÜŞTÜRÜCÜ
-        // =========================================================
-        private FlowDocument BuildHighlightedSnippetDocument(string snippet)
+        
+        private void OpenFile(object? parameter)
         {
-            const string START = "<H>";
-            const string END = "</H>";
+            // Komut parametresi gelmezse, seçili olanı kullan
+            var selected = parameter as SearchResult ?? SelectedSearchResult;
+            if (selected == null) return;
 
-            var doc = new FlowDocument();
-            var paragraph = new Paragraph();
+            string? path = selected.Path;
 
-            if (string.IsNullOrEmpty(snippet))
+            try
             {
-                doc.Blocks.Add(new Paragraph(new Run("")));
-                return doc;
-            }
+                // Durum 1: Arşiv içi dosya
+                if (path.Contains("|"))
+                {
+                    var parts = path.Split(new[] { '|' }, 2);
+                    string archivePath = parts[0];
+                    string entryPath = parts[1];
+                    string tempFile = string.Empty;
 
-            int pos = 0;
-            while (pos < snippet.Length)
+                    if (!File.Exists(archivePath))
+                    {
+                        StatusMessage = $"Arşiv dosyası bulunamadı: {archivePath}";
+                        return;
+                    }
+
+                    // --- GÜVENLİK/UX İYİLEŞTİRMESİ ---
+                    // Her dosya için benzersiz bir klasör oluşturarak çakışmaları önle
+                    string tempDir = Path.Combine(Path.GetTempPath(), "WpfIndexerPreview", Guid.NewGuid().ToString());
+                    System.IO.Directory.CreateDirectory(tempDir);
+                    // --- BİTTİ ---
+
+                    using (var archive = ArchiveFactory.Open(archivePath))
+                    {
+                        var entry = archive.Entries.FirstOrDefault(e => e.Key != null && e.Key.Replace("\\", "/") == entryPath.Replace("\\", "/"));
+                        if (entry == null)
+                        {
+                            StatusMessage = $"Arşiv içinde dosya bulunamadı: {entryPath}";
+                            return;
+                        }
+
+                        tempFile = Path.Combine(tempDir, Path.GetFileName(entryPath));
+
+                        // Dosya kilit kontrolü (MainWindow'dakinin aynısı)
+                        if (File.Exists(tempFile))
+                        {
+                            try
+                            {
+                                using (FileStream fs = File.Open(tempFile, FileMode.Open, FileAccess.Read, FileShare.None)) { }
+                            }
+                            catch (IOException)
+                            {
+                                // Dosya kilitli (muhtemelen açık). Açmayı dene.
+                                Process.Start(new ProcessStartInfo(tempFile) { UseShellExecute = true });
+                                return;
+                            }
+                        }
+
+                        entry.WriteToFile(tempFile, new ExtractionOptions() { Overwrite = true });
+                    }
+                    Process.Start(new ProcessStartInfo(tempFile) { UseShellExecute = true });
+                }
+                // Durum 2: Normal dosya
+                else
+                {
+                    if (!File.Exists(path))
+                    {
+                        StatusMessage = $"Dosya bulunamadı: {path}";
+                        return;
+                    }
+                    Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                }
+            }
+            catch (Exception ex)
             {
-                int start = snippet.IndexOf(START, pos);
-                if (start < 0)
-                {
-                    paragraph.Inlines.Add(new Run(snippet.Substring(pos)));
-                    break;
-                }
-
-                if (start > pos)
-                    paragraph.Inlines.Add(new Run(snippet.Substring(pos, start - pos)));
-
-                int end = snippet.IndexOf(END, start + START.Length);
-                if (end < 0)
-                {
-                    paragraph.Inlines.Add(new Run(snippet.Substring(start)));
-                    break;
-                }
-
-                string highlightText = snippet.Substring(start + START.Length, end - (start + START.Length));
-
-                paragraph.Inlines.Add(new Run(highlightText)
-                {
-                    Background = Brushes.Yellow,
-                    Foreground = Brushes.Black,
-                    FontWeight = FontWeights.Bold
-                });
-
-                pos = end + END.Length;
+                // MessageBox yerine StatusMessage'ı güncelle
+                StatusMessage = $"Hata: Dosya açılamadı: {ex.Message}";
+                _logger.LogError(ex, "Dosya açılamadı (OpenFileCommand): {FilePath}", path);
             }
-
-            doc.Blocks.Add(paragraph);
-            return doc;
         }
-
         private void FireAndForget(Task task)
         {
             task.ContinueWith(t =>

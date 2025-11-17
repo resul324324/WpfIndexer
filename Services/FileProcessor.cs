@@ -27,6 +27,8 @@ using NPOI.HSSF.UserModel; // .xls (ana NPOI paketinden)
 // KALDIRILDI: using NPOI.HSLF.UserModel; (.ppt desteği kaldırıldı)
 using NPOI.SS.UserModel; // ICell ve IRow için ana arayüz
 using NPOI.POIFS.FileSystem;
+ // Paralel işlem sonuçları için
+using System.Threading;
 
 namespace WpfIndexer.Services
 {
@@ -642,26 +644,57 @@ namespace WpfIndexer.Services
                     }
                 }
 
-
-
                 // ----- AŞAMA 2: SAYFALARI PARALEL İŞLE (Consumer / OCR) -----
+                // ***** YENİ EKLENEN KISIM BURASI *****
                 int processedPageCount = 0;
                 int totalPages = pageImages.Count;
 
-                var parallelOptions = new ParallelOptions
+                if (totalPages > 0)
                 {
-                    MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2)
-                };
+                    var parallelOptions = new ParallelOptions
+                    {
+                        // İşlemci çekirdeklerinin yarısını kullanarak OCR yap
+                        MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2)
+                    };
 
-                // Artık tüm OCR sayfa sayfa yukarıda işlendi.
-                // Paralel iş yok. Sadece işlenen sayfa sayısını güncelliyoruz.
-                processedPageCount = extractedTextBag.Count;
+                    Parallel.ForEach(pageImages, parallelOptions, (imageBytes, state, pageIndex) =>
+                    {
+                        try
+                        {
+                            // İlerlemeyi raporla
+                            int currentPage = Interlocked.Increment(ref processedPageCount);
+                            progress?.Report(new ProgressReportModel
+                            {
+                                Message = $"PDF OCR İşleniyor (Sayfa {currentPage}/{totalPages})",
+                                CurrentFile = debugPath,
+                                IsIndeterminate = false, // Artık ilerlemeyi biliyoruz
+                                Current = currentPage,
+                                Total = totalPages
+                            });
 
+                            // Her bir sayfayı (resim byte'larını) tekil görsel olarak işle
+                            string text = RunTesseractOnImageBytes(imageBytes,
+                                debugPath + $" (Sayfa {pageIndex + 1})",
+                                null, // İç progress'i devredışı bırak
+                                0, 0, ocrQuality);
 
+                            if (!string.IsNullOrEmpty(text))
+                            {
+                                extractedTextBag.Add(text);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"[FileProcessor] Tesseract sayfa işleme hatası: {debugPath} (Sayfa {pageIndex + 1}) - {ex.Message}");
+                        }
+                    });
+                }
+                // ***** YENİ KISMIN SONU *****
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[FileProcessor] Ghostscript/Tesseract PDF hatası: {ex.Message}");
+                // Hata olsa bile, o ana kadar işlenenleri döndür
                 return string.Join(Environment.NewLine, extractedTextBag);
             }
 
@@ -725,73 +758,54 @@ namespace WpfIndexer.Services
 
         public static string ExtractVideoThumbnail(string videoPath)
         {
+            string tempDir = Path.Combine(Path.GetTempPath(), "VideoThumbs");
+            Directory.CreateDirectory(tempDir);
+
+            // Thumbnail için benzersiz bir yol oluştur
+            string thumbPath = Path.Combine(tempDir, Path.GetFileNameWithoutExtension(videoPath) + ".jpg");
+
             try
             {
-                string tempDir = Path.Combine(Path.GetTempPath(), "VideoThumbs");
-                Directory.CreateDirectory(tempDir);
+                // ffmpeg'in tam yolunu al (uygulama klasörü içindeki ffmpeg_bin)
+                var ffmpeg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg_bin", "ffmpeg.exe");
 
-                string thumbPath = Path.Combine(tempDir, Path.GetFileNameWithoutExtension(videoPath) + ".jpg");
-
-                try
+                if (File.Exists(ffmpeg))
                 {
-                    // YENİ: ffmpeg'i, programın çalıştığı yerdeki ffmpeg_bin klasöründe ara
-                    var ffmpeg = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ffmpeg_bin", "ffmpeg.exe");
-
-                    if (File.Exists(ffmpeg))
+                    var proc = new System.Diagnostics.Process
                     {
-                        var proc = new System.Diagnostics.Process
+                        StartInfo = new System.Diagnostics.ProcessStartInfo
                         {
-                            StartInfo = new System.Diagnostics.ProcessStartInfo
-                            {
-                                FileName = ffmpeg,
-                                Arguments = $"-i \"{videoPath}\" -ss 00:00:01 -vframes 1 \"{thumbPath}\" -y -loglevel quiet",
-                                CreateNoWindow = true,
-                                UseShellExecute = false
-                            }
-                        };
-                        proc.Start();
-                        proc.WaitForExit();
-                    }
+                            FileName = ffmpeg,
+                            // Video'nun 1. saniyesinden 1 kare al, üzerine yaz, sessiz çalış
+                            Arguments = $"-i \"{videoPath}\" -ss 00:00:01 -vframes 1 \"{thumbPath}\" -y -loglevel quiet",
+                            CreateNoWindow = true,
+                            UseShellExecute = false
+                        }
+                    };
+                    proc.Start();
+                    proc.WaitForExit(); // İşlemin bitmesini bekle
                 }
-                catch { }
-
-                if (File.Exists(thumbPath))
-                    return thumbPath;
-
-                var player = new System.Windows.Media.MediaPlayer();
-                player.Open(new Uri(videoPath));
-
-                // MediaPlayer'ın açılması için biraz zaman tanıyın
-                System.Threading.Thread.Sleep(500); // 500ms -> 1000ms
-
-                // Pozisyonu 0.5 saniye yerine 2. saniyeye ayarlayın
-                player.Position = TimeSpan.FromSeconds(1);
-
-                // Seek (atlama) işleminin tamamlanması için ek zaman tanıyın
-                //System.Threading.Thread.Sleep(1000);
-
-                int w = 320, h = 180;
-                var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(w, h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-                var dv = new System.Windows.Media.DrawingVisual();
-
-                using (var dc = dv.RenderOpen())
+                else
                 {
-                    dc.DrawVideo(player, new System.Windows.Rect(0, 0, w, h));
+                    // ffmpeg bulunamazsa, bir hata log'u basabiliriz
+                    Console.WriteLine($"[FileProcessor] ffmpeg.exe bulunamadı: {ffmpeg}");
+                    return ""; // Başarısız
                 }
-
-                bmp.Render(dv);
-                BitmapEncoder encoder = new JpegBitmapEncoder();
-                encoder.Frames.Add(BitmapFrame.Create(bmp));
-
-                using (var fs = new FileStream(thumbPath, FileMode.Create))
-                    encoder.Save(fs);
-
-                return thumbPath;
             }
-            catch
+            catch (Exception ex)
             {
-                return "";
+                // ffmpeg işlemi sırasında bir hata olursa
+                Console.WriteLine($"[FileProcessor] ffmpeg thumbnail hatası: {ex.Message}");
+                return ""; // Başarısız
             }
+
+            // İşlem başarılı olduysa ve dosya oluşturulduysa yolu döndür
+            if (File.Exists(thumbPath))
+                return thumbPath;
+
+            // MediaPlayer kullanan yedek (fallback) kod kaldırıldı.
+            // Eğer ffmpeg dosyayı oluşturamadıysa (örn. bozuk video), boş döndür.
+            return "";
         }
         #endregion
     }

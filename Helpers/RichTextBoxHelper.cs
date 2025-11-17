@@ -6,7 +6,7 @@ using System.Windows.Media;
 
 namespace WpfIndexer.Helpers
 {
-    public static class RichTextBoxHelper
+    public class RichTextBoxHelper : DependencyObject
     {
         public static readonly DependencyProperty BoundDocumentProperty =
             DependencyProperty.RegisterAttached(
@@ -15,36 +15,40 @@ namespace WpfIndexer.Helpers
                 typeof(RichTextBoxHelper),
                 new PropertyMetadata(null, OnBoundDocumentChanged));
 
-        public static void SetBoundDocument(DependencyObject d, FlowDocument value)
+        public static FlowDocument GetBoundDocument(DependencyObject obj)
         {
-            d.SetValue(BoundDocumentProperty, value);
+            return (FlowDocument)obj.GetValue(BoundDocumentProperty);
         }
 
-        public static FlowDocument GetBoundDocument(DependencyObject d)
+        public static void SetBoundDocument(DependencyObject obj, FlowDocument value)
         {
-            return (FlowDocument)d.GetValue(BoundDocumentProperty);
+            obj.SetValue(BoundDocumentProperty, value);
         }
 
         private static void OnBoundDocumentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             if (d is not RichTextBox rtb) return;
 
+            // --- SANALLAŞTIRMA DÜZELTMESİ ---
+            // Yeni belgeyi atamadan önce, RichTextBox'ın mevcut belgesini serbest bırak.
+            rtb.Document = new FlowDocument();
+            // --- DÜZELTME SONU ---
+
             var doc = e.NewValue as FlowDocument;
-            rtb.Document = doc;
+            rtb.Document = doc; // Bu satır artık güvenlidir
 
             if (doc == null) return;
 
             // Aranan kelimeye odaklanma mantığı
             rtb.Dispatcher.BeginInvoke(() =>
             {
-                // YENİ: Vurgu fırçasını dinamik olarak temadan al
+                // Vurgu fırçasını dinamik olarak temadan al
                 var highlightBrush = (Brush)rtb.FindResource("HighlightBackgroundBrush");
 
                 var firstMatch = doc.Blocks
                     .OfType<Paragraph>()
                     .SelectMany(p => p.Inlines.OfType<Run>())
-                    // ESKİ: .FirstOrDefault(run => run.Background == Brushes.Yellow);
-                    .FirstOrDefault(run => run.Background == highlightBrush); // YENİ
+                    .FirstOrDefault(run => run.Background == highlightBrush);
 
                 if (firstMatch != null)
                 {

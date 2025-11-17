@@ -21,10 +21,7 @@ namespace WpfIndexer
 
         public App()
         {
-            // DÜZELTME: Dosya boyutu limitini 1MB'a düşürüyoruz (500 satır isteğine karşılık)
-            const long maxLogSizeBytes = 1 * 1024 * 1024; // 1 MB
-            const int retainedLogCountLimit = 5; // En fazla 5 yedek dosya (system.log.1, system.log.2...)
-
+            
             Current.DispatcherUnhandledException += Current_DispatcherUnhandledException;
         }
 
@@ -86,12 +83,17 @@ namespace WpfIndexer
 
             _userSettingsService?.SaveSettings();
 
-            // DÜZELTME: "Uygulama açıldı/kapandı" logları kaldırıldı (Hata 4)
-            // Log.Information("Uygulama kapatılıyor...");
-
-            // Tüm logların diske yazıldığından emin ol
             Log.CloseAndFlush();
             (_searchLoggerInstance as IDisposable)?.Dispose();
+
+            // ---- YENİ EKLENEN KISIM ----
+            // IDisposable olarak kaydedilen Singleton servislerin (örn: LuceneIndexService)
+            // Dispose() metodunu tetiklemek için.
+            if (ServiceProvider is IDisposable disposableProvider)
+            {
+                disposableProvider.Dispose();
+            }
+            // ---- BİTTİ ----
 
             base.OnExit(e);
         }
