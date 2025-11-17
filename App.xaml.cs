@@ -25,23 +25,6 @@ namespace WpfIndexer
             const long maxLogSizeBytes = 1 * 1024 * 1024; // 1 MB
             const int retainedLogCountLimit = 5; // En fazla 5 yedek dosya (system.log.1, system.log.2...)
 
-            // 1. Sistem Loglaması (system.log)
-            Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Debug()
-                .WriteTo.Debug()
-                .WriteTo.File(
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "system.log"), // Her zaman 'system.log' dosyasına yazacak
-                                                                                               // DÜZELTME: rollingInterval: RollingInterval.Day KALDIRILDI. (Tarih eklemesini bu yapıyordu)
-                    fileSizeLimitBytes: maxLogSizeBytes,       // 1MB'a ulaşınca
-                    rollOnFileSizeLimit: true,                // YENİ: Dosya boyutu dolunca yeni dosya oluştur (adını system.log.1 yap)
-                    retainedFileCountLimit: retainedLogCountLimit, // En fazla 5 yedek tut
-                    outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-                .CreateLogger();
-
-            // DÜZELTME: "Uygulama açıldı/kapandı" logları kaldırıldı (Hata 4)
-            // Log.Information("Uygulama başlatılıyor (App constructor)...");
-            // Log.Information("Sistem loglayıcı başlatıldı."); 
-
             Current.DispatcherUnhandledException += Current_DispatcherUnhandledException;
         }
 

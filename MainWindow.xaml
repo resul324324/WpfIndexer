@@ -615,8 +615,18 @@
                                        Foreground="{DynamicResource TextColor}"/>
 
                             <DataGrid Grid.Row="1"
-                                      x:Name="SearchResultsDataGridRight" ItemsSource="{Binding SearchResults}"
+                                      x:Name="SearchResultsDataGridRight"
+                                      ItemsSource="{Binding SearchResults}"
                                       SelectedItem="{Binding SelectedSearchResult}"
+          
+                                      EnableRowVirtualization="True"
+                                      EnableColumnVirtualization="True"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
+                                      ScrollViewer.CanContentScroll="True"
+                                      ScrollViewer.IsDeferredScrollingEnabled="True"
+                                      RowHeight="28"
+
                                       MouseDoubleClick="SearchResultsListView_MouseDoubleClick"
                                       AutoGenerateColumns="False"
                                       CanUserSortColumns="True"
@@ -657,12 +667,45 @@
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header=" " Width="32">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Image Source="{Binding Thumbnail}" Width="28" Height="28" Stretch="UniformToFill"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+
                                     <DataGridTextColumn Header="Dosya Adı" Binding="{Binding FileName}" SortMemberPath="FileName" Width="250"/>
                                     <DataGridTextColumn Header="Tür" Binding="{Binding FileType}" SortMemberPath="FileType" Width="120"/>
                                     <DataGridTextColumn Header="Boyut" Binding="{Binding Size, Converter={StaticResource FileSizeConverter}}" SortMemberPath="Size" Width="100"/>
                                     <DataGridTextColumn Header="Tarih" Binding="{Binding ModificationDate, StringFormat='g'}" SortMemberPath="ModificationDate" Width="140"/>
                                     <DataGridTextColumn Header="Index Adı" Binding="{Binding IndexName}" SortMemberPath="IndexName" Width="120"/>
+
+                                    <DataGridTemplateColumn Header="İçerik" Width="350">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <RichTextBox 
+                IsReadOnly="True"
+                BorderThickness="0"
+                Background="Transparent"
+                Foreground="{DynamicResource TextColor}"
+                FontSize="13"
+                VerticalScrollBarVisibility="Hidden"
+                HorizontalScrollBarVisibility="Hidden"
+                Padding="0">
+
+                                                    <helpers:RichTextBoxHelper.BoundDocument>
+                                                        <Binding Path="SnippetDocument" />
+                                                    </helpers:RichTextBoxHelper.BoundDocument>
+
+                                                </RichTextBox>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
                                     <DataGridTextColumn Header="Yol" Binding="{Binding DirectoryPath}" SortMemberPath="DirectoryPath" Width="400"/>
+
                                 </DataGrid.Columns>
                             </DataGrid>
                         </Grid>
@@ -763,8 +806,18 @@
                                        Foreground="{DynamicResource TextColor}"/>
 
                             <DataGrid Grid.Row="1"
-                                      x:Name="SearchResultsDataGridBottom" ItemsSource="{Binding SearchResults}"
+                                      x:Name="SearchResultsDataGridBottom"
+                                      ItemsSource="{Binding SearchResults}"
                                       SelectedItem="{Binding SelectedSearchResult}"
+          
+                                      EnableRowVirtualization="True"
+                                      EnableColumnVirtualization="True"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling"
+                                      ScrollViewer.CanContentScroll="True"
+                                      ScrollViewer.IsDeferredScrollingEnabled="True"
+                                      RowHeight="28"
+
                                       MouseDoubleClick="SearchResultsListView_MouseDoubleClick"
                                       AutoGenerateColumns="False"
                                       CanUserSortColumns="True"
@@ -805,11 +858,41 @@
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
                                     </DataGridTemplateColumn>
+                                    <DataGridTemplateColumn Header=" " Width="32">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Image Source="{Binding Thumbnail}" Width="28" Height="28" Stretch="UniformToFill"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+
+
                                     <DataGridTextColumn Header="Dosya Adı" Binding="{Binding FileName}" SortMemberPath="FileName" Width="250"/>
                                     <DataGridTextColumn Header="Tür" Binding="{Binding FileType}" SortMemberPath="FileType" Width="120"/>
                                     <DataGridTextColumn Header="Boyut" Binding="{Binding Size, Converter={StaticResource FileSizeConverter}}" SortMemberPath="Size" Width="100"/>
                                     <DataGridTextColumn Header="Tarih" Binding="{Binding ModificationDate, StringFormat='g'}" SortMemberPath="ModificationDate" Width="140"/>
                                     <DataGridTextColumn Header="Index Adı" Binding="{Binding IndexName}" SortMemberPath="IndexName" Width="120"/>
+                                    <DataGridTemplateColumn Header="İçerik" Width="350">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <RichTextBox 
+                IsReadOnly="True"
+                BorderThickness="0"
+                Background="Transparent"
+                Foreground="{DynamicResource TextColor}"
+                FontSize="13"
+                VerticalScrollBarVisibility="Hidden"
+                HorizontalScrollBarVisibility="Hidden"
+                Padding="0">
+
+                                                    <helpers:RichTextBoxHelper.BoundDocument>
+                                                        <Binding Path="SnippetDocument" />
+                                                    </helpers:RichTextBoxHelper.BoundDocument>
+
+                                                </RichTextBox>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="Yol" Binding="{Binding DirectoryPath}" SortMemberPath="DirectoryPath" Width="*"/>
                                 </DataGrid.Columns>
                             </DataGrid>

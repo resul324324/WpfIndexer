@@ -1,45 +1,45 @@
-﻿using System;
+﻿using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Packaging;
+using Lucene.Net.Analysis;
+using Lucene.Net.Analysis.Standard;
+using Lucene.Net.Index;
+using Lucene.Net.Search;
+using Lucene.Net.Search.Highlight;
+using Lucene.Net.Store;
+// Lucene 'using'
+using Lucene.Net.Util;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Win32;
+using OpenXmlPowerTools;
+using Serilog;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+// DÜZELTME: 'Theme' enum'unun bulunduğu namespace'i ekliyoruz.
+
+using System.Collections.Specialized; // Dosya kopyalama (Clipboard) için EKLENDİ
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
+// Canlı Mod için 'using'
+using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows; // Clipboard için EKLENDİ
 using System.Windows.Input;
+using System.Xml.Linq;
 using WpfIndexer.Helpers; // ShellIconHelper için EKLENDİ (zaten vardı ama doğrulayalım)
 using WpfIndexer.Models;
 using WpfIndexer.Services;
 using WpfIndexer.Views;
-using Microsoft.Extensions.Logging;
-using System.Drawing.Imaging;
-using Serilog;
-using Lucene.Net.Store;
-using System.Collections.Generic;
-using Microsoft.Win32;
-using System.Text;
-using Microsoft.Extensions.DependencyInjection;
-using Lucene.Net.Index;
+using System.Windows.Documents; // FlowDocument, Paragraph, Run
+using System.Windows.Media;     // Brushes
 
-// Lucene 'using'
-using Lucene.Net.Util;
-using Lucene.Net.Search;
-using Lucene.Net.Search.Highlight;
-using Lucene.Net.Analysis;
-using Lucene.Net.Analysis.Standard;
-
-// Canlı Mod için 'using'
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Xml.Linq;
-using OpenXmlPowerTools;
-using DocumentFormat.OpenXml.Packaging;
-using ClosedXML.Excel;
-
-// DÜZELTME: 'Theme' enum'unun bulunduğu namespace'i ekliyoruz.
-using WpfIndexer.Services;
-using System.Collections.Specialized; // Dosya kopyalama (Clipboard) için EKLENDİ
 
 [assembly: System.Runtime.Versioning.SupportedOSPlatform("windows")]
 
@@ -59,6 +59,10 @@ namespace WpfIndexer.ViewModels
 
         private Query? _lastExecutedLuceneQuery;
         private CancellationTokenSource? _previewCts;
+        private CancellationTokenSource? _suggestionCts;
+        private readonly TimeSpan _suggestionDelay = TimeSpan.FromMilliseconds(200);
+
+
 
         // Paylaşılan ayar/veri servisleri
         public IndexSettingsService IndexSettings { get; }
@@ -74,9 +78,30 @@ namespace WpfIndexer.ViewModels
                 if (_query == value) return;
                 _query = value;
                 OnPropertyChanged();
-                _ = UpdateSuggestionsAsync(value);
+
+                // Tek debounce mekanizması
+                _suggestionCts?.Cancel();
+                _suggestionCts = new CancellationTokenSource();
+                var token = _suggestionCts.Token;
+                string q = value;
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(_suggestionDelay, token);
+                        if (token.IsCancellationRequested) return;
+
+                        await UpdateSuggestionsAsync(q);
+                    }
+                    catch { }
+                }, token);
             }
         }
+
+
+
+
         // YENİ: Arayüzün durumunu (arama öncesi/sonrası) belirler
         private bool _isSearchPerformed;
         public bool IsSearchPerformed
@@ -308,7 +333,8 @@ namespace WpfIndexer.ViewModels
 
             if (e.PropertyName == nameof(UserSettings.PreviewMode) || e.PropertyName == nameof(UserSettings.Theme))
             {
-                _ = LoadPreviewAsyncWithToken();
+                FireAndForget(LoadPreviewAsyncWithToken());
+
             }
         }
 
@@ -325,11 +351,8 @@ namespace WpfIndexer.ViewModels
         {
             if (string.IsNullOrWhiteSpace(Query)) return;
 
-            // YENİ: Arama yapıldığında arayüzü "arama sonrası" durumuna geçir
             if (!IsSearchPerformed)
-            {
                 IsSearchPerformed = true;
-            }
 
             IsSuggestionsOpen = false;
             StatusMessage = "Aranıyor...";
@@ -341,7 +364,8 @@ namespace WpfIndexer.ViewModels
                 StatusMessage = "Arama yapılamadı. Lütfen geçerli bir indeks seçin.";
                 if (!string.IsNullOrEmpty(indexName))
                 {
-                    MessageBox.Show($"'{indexName}' indeksi bulunamadı veya geçersiz.\n\nLütfen 'İndeks -> İndeks Yönetimi' menüsünden kontrol edin.", "İndeks Bulunamadı", MessageBoxButton.OK, MessageBoxImage.Error);
+                    MessageBox.Show($"'{indexName}' indeksi bulunamadı veya geçersiz.\n\nLütfen 'İndeks -> İndeks Yönetimi' menüsünden kontrol edin.",
+                        "İndeks Bulunamadı", MessageBoxButton.OK, MessageBoxImage.Error);
                 }
                 return;
             }
@@ -350,7 +374,11 @@ namespace WpfIndexer.ViewModels
             {
                 var stopwatch = Stopwatch.StartNew();
 
-                var response = await _indexService.SearchAsync(Query, validIndexPaths, UserSettings.DefaultSearchResultLimit);
+                var response = await _indexService.SearchAsync(
+                    Query,
+                    validIndexPaths,
+                    UserSettings.DefaultSearchResultLimit);
+
                 stopwatch.Stop();
 
                 _lastExecutedLuceneQuery = response.LuceneQuery;
@@ -361,49 +389,62 @@ namespace WpfIndexer.ViewModels
                     _logger.LogWarning("Geçersiz veya boş Lucene sorgusu: {Query}", Query);
                 }
 
-                Application.Current.Dispatcher.Invoke(() =>
+                // UI thread
+                await Application.Current.Dispatcher.InvokeAsync(() =>
                 {
                     SearchResults.Clear();
-
-                    // ====================================================================
-                    // >>>>>>>> ADIM 4 DEĞİŞİKLİĞİ BURADA BAŞLIYOR (İKON YÜKLEME) <<<<<<<<<
-                    // ====================================================================
-
-                    // Not: Bu işlemi 'async' yapmıyoruz. Sebebi:
-                    // 1. Sonuçlar listeye eklenmeden önce ikon ve tür adlarının yüklenmiş olmasını istiyoruz.
-                    // 2. Bu, UI'ın sonradan "pıt pıt" güncellenmesini engeller (INotifyPropertyChanged gerekmez).
-                    // 3. ShellIconHelper (Adım 3) cache (önbellek) kullandığı için,
-                    //    bu işlem (ilk .pdf, .txt vb. hariç) ÇOK HIZLI olacaktır.
 
                     foreach (var item in response.Results)
                     {
                         try
                         {
-                            // Adım 3'te oluşturduğumuz Helper'ı burada kullanıyoruz.
+                            // İkon ve tür adı
                             item.FileIcon = Helpers.ShellIconHelper.GetFileIcon(item.Extension);
                             item.FileType = Helpers.ShellIconHelper.GetFileTypeName(item.Extension);
+
+                            // Sadece resimler için thumbnail’i ARKA PLANDA üret
+                            if (item.IsImage)
+                            {
+                                _ = Task.Run(async () =>
+                                {
+                                    try
+                                    {
+                                        var thumb = await ThumbnailCache.GetImageThumbnailAsync(item.Path);
+                                        if (thumb != null)
+                                        {
+                                            // UI thread dışında kullanılacağı için Freeeze
+                                            thumb.Freeze();
+                                            item.Thumbnail = thumb;
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogWarning(ex, "Thumbnail oluşturulamadı: {Path}", item.Path);
+                                    }
+                                });
+                            }
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogWarning(ex, "Dosya ikonu/türü yüklenemedi: {Path}", item.Path);
-                            // Hata olursa, 'Tür' sütununda sadece uzantıyı göster
+                            _logger.LogWarning(ex, "Dosya ikonu/türü/thumbnail yüklenemedi: {Path}", item.Path);
                             item.FileType = item.Extension.TrimStart('.').ToUpper();
-                            item.FileIcon = null; // İkon olmasın
+                            item.FileIcon = null;
                         }
+                        // MADDE 18 – Snippet FlowDocument üret
+                        item.SnippetDocument = BuildHighlightedSnippetDocument(item.Snippet);
 
-                        // İkonu ve Türü yüklenmiş olan sonucu listeye ekle
                         SearchResults.Add(item);
                     }
 
-                    // ==================================================================
-                    // >>>>>>>> ADIM 4 DEĞİŞİKLİĞİ BURADA BİTİYOR <<<<<<<<<
-                    // ==================================================================
-
                     StatusMessage = $"{response.Results.Count} sonuç {stopwatch.Elapsed.TotalSeconds:F2} saniyede bulundu.";
-                    _logger.LogInformation("Arama tamamlandı: Sorgu '{Query}', Sonuç: {ResultCount}, Süre: {Duration}ms", Query, response.Results.Count, stopwatch.ElapsedMilliseconds);
+                    _logger.LogInformation("Arama tamamlandı: {Query}, Sonuç: {Count}, Süre: {Ms}ms",
+                        Query, response.Results.Count, stopwatch.ElapsedMilliseconds);
 
                     UpdateCommandCanExecute();
                 });
+
+
+
 
                 if (UserSettings.SaveSearchHistory)
                 {
@@ -417,6 +458,7 @@ namespace WpfIndexer.ViewModels
                 StatusMessage = $"Arama Hatası: {ex.Message}";
             }
         }
+
 
         // İndeksleri Doğrulama
         private (List<string> ValidPaths, string FirstInvalidName) ValidateSelectedIndexes()
@@ -452,43 +494,98 @@ namespace WpfIndexer.ViewModels
             }
             return (validPaths, firstInvalidName);
         }
+        private void DebounceSuggestions(string query)
+        {
+            _suggestionCts?.Cancel();
+            _suggestionCts?.Dispose();
+            _suggestionCts = new CancellationTokenSource();
+            var token = _suggestionCts.Token;
 
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(_suggestionDelay, token);
+                    if (token.IsCancellationRequested) return;
+
+                    await UpdateSuggestionsAsync(query);
+                }
+                catch (TaskCanceledException)
+                {
+                    // yok say
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Suggestion update error");
+                }
+            }, token);
+        }
+
+        // Arama Önerileri
         // Arama Önerileri
         private async Task UpdateSuggestionsAsync(string query)
         {
             if (!UserSettings.ShowSearchSuggestions || string.IsNullOrWhiteSpace(query) || query.Length < 2)
             {
-                IsSuggestionsOpen = false;
-                Suggestions.Clear();
+                // ===== DEĞİŞİKLİK BURADA: UI Güncellemesi Dispatcher ile yapılmalı =====
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    IsSuggestionsOpen = false;
+                    Suggestions.Clear();
+                });
+                // =====================================================================
                 return;
             }
+
+            // Bu kısım arka planda kalabilir (veri çekme)
             var suggestions = await _searchHistoryService.GetSuggestionsAsync(query, 5);
-            if (suggestions.Any())
+
+            // ===== DEĞİŞİKLİK BURADA: UI Güncellemesi Dispatcher ile yapılmalı =====
+            Application.Current.Dispatcher.Invoke(() =>
             {
-                Suggestions.Clear();
-                foreach (var s in suggestions)
+                if (suggestions.Any())
                 {
-                    Suggestions.Add(s);
+                    Suggestions.Clear();
+                    foreach (var s in suggestions)
+                    {
+                        Suggestions.Add(s);
+                    }
+                    IsSuggestionsOpen = true;
                 }
-                IsSuggestionsOpen = true;
-            }
-            else
-            {
-                IsSuggestionsOpen = false;
-            }
+                else
+                {
+                    IsSuggestionsOpen = false;
+                }
+            });
+            // =====================================================================
         }
+
 
         // Öneri Seçimi
         private void SelectSuggestion(object? selectedItem)
         {
             if (selectedItem is string suggestion)
             {
-                Query = suggestion;
-                OnPropertyChanged(nameof(Query));
+                // 1. Bayrağı hemen kapat (UI'ın kapanması için)
                 IsSuggestionsOpen = false;
+
+                // 2. Query'yi güncelleyen 'set' bloğunu atla
+                //    'set' bloğu, UpdateSuggestionsAsync'ı tetikleyerek
+                //    bu popup'ı yeniden açmaya çalışıyor (yarış durumu).
+
+                // ESKİ (Hatalı):
+                // Query = suggestion;
+                // OnPropertyChanged(nameof(Query)); // Bu satır 'Query = suggestion' içindeydi
+
+                // YENİ (Doğru):
+                _query = suggestion; // Arka plandaki alanı (field) doğrudan ayarla
+                OnPropertyChanged(nameof(Query)); // UI'ı (TextBox) güncelle
+
+                // 3. Aramayı başlat
                 _ = SearchAsync();
             }
         }
+
 
         // --- PENCERE AÇMA METODLARI ---
         private void OpenWindow<T>() where T : Window
@@ -668,6 +765,9 @@ namespace WpfIndexer.ViewModels
                 if (ext == ".mp4" || ext == ".wmv" || ext == ".avi" || ext == ".mkv" || ext == ".mov" || ext == ".mpeg" || ext == ".webm")
                 {
                     string thumb = await Task.Run(() => FileProcessor.ExtractVideoThumbnail(path));
+                    ThumbnailCache.SetVideoThumbnail(path, thumb);
+
+
                     if (token.IsCancellationRequested) return;
 
                     if (System.IO.File.Exists(thumb))
@@ -680,109 +780,94 @@ namespace WpfIndexer.ViewModels
                 }
 
                 bool livePreviewSuccessful = false;
-                bool autoFallbackToReportMode = false;
+                bool requireFallback = false;
 
-                // ********* CANLI MOD (HTML/WebView) *********
+                // -------------------------
+                // 1) CANLI ÖNİZLEME DENE
+                // -------------------------
                 if (UserSettings.EnablePreview && UserSettings.PreviewMode == PreviewMode.Canli)
                 {
-                    bool canliDestekli = ext is ".pdf" or ".txt" or ".log" or ".xml" or ".json" or ".cs" or ".html" or ".css" or ".docx" or ".xlsx" or ".csv";
+                    bool canLive =
+                        ext is ".pdf" or ".txt" or ".log" or ".xml" or ".json" or ".cs" or ".html" or ".css"
+                        or ".docx" or ".xlsx" or ".csv";
 
-                    if (canliDestekli)
+                    if (canLive)
                     {
                         try
                         {
-                            // Doğrudan WebView (Sadece PDF)
+                            // PDF → direkt WebView2
                             if (ext == ".pdf")
                             {
-                                if (token.IsCancellationRequested) return;
-
-                                // WebView2'yi göster ve PDF'i yükle
                                 SelectedPreviewWebViewUri = new Uri(path);
                                 WebViewPreviewVisibility = Visibility.Visible;
                                 livePreviewSuccessful = true;
                             }
-                            // HTML'e dönüşüm (DOCX, XLSX, CSV ve TXT türevleri)
-                            else if (ext is ".docx" or ".xlsx" or ".csv" or ".txt" or ".log" or ".xml" or ".json" or ".cs" or ".html" or ".css")
+                            else
                             {
-                                StatusMessage = "Canlı önizleme için dosya dönüştürülüyor...";
-
+                                // DOCX / XLSX / METİN TÜREVLERİ → HTML'e dönüştür
                                 string? htmlPath = await ConvertFileToHtmlAsync(path, ext, Query, token);
-                                if (token.IsCancellationRequested) return;
 
-                                StatusMessage = "Hazır.";
-
-                                if (htmlPath != null && System.IO.File.Exists(htmlPath))
+                                if (!token.IsCancellationRequested &&
+                                    htmlPath != null && File.Exists(htmlPath))
                                 {
-                                    // WebView2'ye yeni URI'yi yükle
                                     SelectedPreviewWebViewUri = new Uri(htmlPath);
                                     WebViewPreviewVisibility = Visibility.Visible;
                                     livePreviewSuccessful = true;
                                 }
                                 else
                                 {
-                                    _logger.LogWarning("HTML dönüşüm başarısız, Rapor moduna düşülüyor: {FilePath}", path);
-                                    livePreviewSuccessful = false;
-                                    autoFallbackToReportMode = true;
+                                    requireFallback = true;
                                 }
                             }
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, "Canlı önizleme hatası, Rapor moduna düşülüyor: {FilePath}", path);
-                            livePreviewSuccessful = false;
-                            autoFallbackToReportMode = true;
+                            _logger.LogError(ex, "Canlı önizleme başarısız → Rapor moduna geçiliyor.");
+                            requireFallback = true;
                         }
                     }
                     else
                     {
-                        // Canlı modda desteklenmeyen tür — otomatik Rapor moduna düş
-                        _logger.LogInformation("Canlı modda desteklenmeyen format {Extension}, Rapor moduna düşülüyor.", ext);
-                        livePreviewSuccessful = false;
-                        autoFallbackToReportMode = true;
+                        // Canlı mod bu formatı desteklemiyor → rapora geç
+                        requireFallback = true;
                     }
                 }
-
-                // ********* RAPOR MODU (Düz Metin/RichTextBox) *********
-                // - Doğrudan Rapor modu seçilmişse VEYA
-                // - Canlı modda desteklenmeyen formatlar için otomatik düşüş
-                if (UserSettings.EnablePreview &&
-                    (UserSettings.PreviewMode == PreviewMode.Rapor || !livePreviewSuccessful || autoFallbackToReportMode))
+                else
                 {
-                    if (autoFallbackToReportMode)
-                    {
-                        StatusMessage = "Canlı mod desteklenmiyor, Rapor moduna düşülüyor...";
-                    }
-                    else
-                    {
-                        StatusMessage = "Önizleme indeksten yükleniyor...";
-                    }
+                    // Zaten Rapor modunda
+                    requireFallback = true;
+                }
 
-                    var indexDefinition = IndexSettings.Indexes.FirstOrDefault(i => i.Name == currentSelection.IndexName);
+                // -------------------------
+                // 2) RAPOR MODUNA DÜŞÜŞ
+                // -------------------------
+                if (!livePreviewSuccessful || requireFallback)
+                {
+                    var indexDefinition = IndexSettings.Indexes
+                        .FirstOrDefault(i => i.Name == currentSelection.IndexName);
+
                     if (indexDefinition == null)
                     {
-                        if (token.IsCancellationRequested) return;
                         UnsupportedMessage = "Hata: İndeks tanımı bulunamadı.";
-                        OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
                         return;
                     }
 
-                    string content = await _indexService.GetContentByPathAsync(indexDefinition.IndexPath, path);
-                    if (token.IsCancellationRequested) return;
-
-                    StatusMessage = "Hazır.";
+                    string content = await _indexService.GetContentByPathAsync(
+                        indexDefinition.IndexPath, path);
 
                     if (!string.IsNullOrEmpty(content))
                     {
                         SelectedPreviewContent = content;
-                        HighlightPreviewContent(); // Vurgulamayı yap
-                        OnPropertyChanged(nameof(TextPreviewVisibility)); // Paneli görünür yap
+                        HighlightPreviewContent();
+                        OnPropertyChanged(nameof(TextPreviewVisibility));
                     }
                     else
                     {
-                        if (token.IsCancellationRequested) return;
-                        UnsupportedMessage = $"Bu dosya türü ({ext}) için önizleme desteklenmiyor veya dosya içeriği boş.";
+                        UnsupportedMessage =
+                            $"Bu dosya türü ({ext}) için önizleme desteklenmiyor veya içerik yok.";
                     }
                 }
+
             }
             catch (Exception ex)
             {
@@ -1075,6 +1160,10 @@ namespace WpfIndexer.ViewModels
                 if (token.IsCancellationRequested) return null;
 
                 await System.IO.File.WriteAllTextAsync(tempHtmlPath, htmlContent, token);
+                // HTML cache'e kaydet
+                ThumbnailCache.SetHtmlPreviewPath(sourcePath, tempHtmlPath);
+
+
                 return tempHtmlPath;
             }
             catch (Exception ex)
@@ -1188,17 +1277,15 @@ namespace WpfIndexer.ViewModels
                 OnPropertyChanged(nameof(TextPreviewVisibility));
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
 
-                // Yeni önizlemeyi yükle
-                _ = LoadPreviewAsyncWithToken();
+                // Yeni önizlemeyi yükle (fire-and-forget şekilde)
+                FireAndForget(LoadPreviewAsyncWithToken());
 
-                // --- YENİ GÜNCELLEME ---
-                // Seçim değiştiğinde, bu seçime bağlı tüm komutların
-                // (Kopyala, Konum Aç vb.) 'CanExecute' durumu güncellenmeli.
+                // Komutların CanExecute durumunu güncelle
                 UpdateCommandCanExecute();
-                // --- BİTTİ ---
 
                 return;
             }
+
 
             if (name == nameof(SelectedPreviewContent) ||
                 name == nameof(SelectedPreviewImagePath) ||
@@ -1217,5 +1304,67 @@ namespace WpfIndexer.ViewModels
                 OnPropertyChanged(nameof(UnsupportedPreviewVisibility));
             }
         }
+        // =========================================================
+        // MADDE 18 – LIST SNIPPET → FLOWDOCUMENT DÖNÜŞTÜRÜCÜ
+        // =========================================================
+        private FlowDocument BuildHighlightedSnippetDocument(string snippet)
+        {
+            const string START = "<H>";
+            const string END = "</H>";
+
+            var doc = new FlowDocument();
+            var paragraph = new Paragraph();
+
+            if (string.IsNullOrEmpty(snippet))
+            {
+                doc.Blocks.Add(new Paragraph(new Run("")));
+                return doc;
+            }
+
+            int pos = 0;
+            while (pos < snippet.Length)
+            {
+                int start = snippet.IndexOf(START, pos);
+                if (start < 0)
+                {
+                    paragraph.Inlines.Add(new Run(snippet.Substring(pos)));
+                    break;
+                }
+
+                if (start > pos)
+                    paragraph.Inlines.Add(new Run(snippet.Substring(pos, start - pos)));
+
+                int end = snippet.IndexOf(END, start + START.Length);
+                if (end < 0)
+                {
+                    paragraph.Inlines.Add(new Run(snippet.Substring(start)));
+                    break;
+                }
+
+                string highlightText = snippet.Substring(start + START.Length, end - (start + START.Length));
+
+                paragraph.Inlines.Add(new Run(highlightText)
+                {
+                    Background = Brushes.Yellow,
+                    Foreground = Brushes.Black,
+                    FontWeight = FontWeights.Bold
+                });
+
+                pos = end + END.Length;
+            }
+
+            doc.Blocks.Add(paragraph);
+            return doc;
+        }
+
+        private void FireAndForget(Task task)
+        {
+            task.ContinueWith(t =>
+            {
+                _logger.LogError(t.Exception, "Fire-and-forget task error");
+            }, TaskContinuationOptions.OnlyOnFaulted);
+        }
+
     }
+
 }

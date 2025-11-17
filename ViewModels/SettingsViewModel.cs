@@ -18,6 +18,8 @@ namespace WpfIndexer.ViewModels
 
         public ICommand SaveAndCloseCommand { get; }
         public ICommand ClearSearchHistoryCommand { get; }
+        public event Action? RequestClose;
+
 
         public SettingsViewModel(UserSettingsService userSettingsService, SearchHistoryService searchHistoryService, ThemeService themeService)
         {
@@ -56,7 +58,9 @@ namespace WpfIndexer.ViewModels
             _themeService.ApplyTheme(Settings.Theme);
             _userSettingsService.SaveSettings();
 
-            (window as Window)?.Close();
+            // ViewModel View’a "kapan" sinyali gönderir
+            RequestClose?.Invoke();
+
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

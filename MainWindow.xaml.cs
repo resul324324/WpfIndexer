@@ -140,14 +140,67 @@ namespace WpfIndexer.Views
                 }
             }
         }
+        // MainWindow.xaml.cs
+
         private void SuggestionPopup_Closed(object sender, EventArgs e)
         {
-            // Popup (dışarı tıklayarak vs.) kapandığında,
-            // ViewModel'deki IsSuggestionsOpen özelliğini manuel olarak false yap.
-            if (DataContext is WpfIndexer.ViewModels.MainViewModel vm && vm.IsSuggestionsOpen)
+            if (DataContext is not WpfIndexer.ViewModels.MainViewModel vm)
+                return;
+
+            // Eğer suggestions listesi zaten kod tarafından (örn: arama yaparak) 
+            // kapatıldıysa (IsSuggestionsOpen zaten false ise), tekrar false yapmaya gerek yok.
+            if (!vm.IsSuggestionsOpen)
+                return;
+
+            // --- DEĞİŞİKLİK BURADA BAŞLIYOR ---
+            // Sadece "o anda aktif olması gereken" popup'tan gelen 'Closed' olayını
+            // dikkate al. Diğer popup'ın (pasif olanın) trigger'ı değiştiği için
+            // tetiklenen 'Closed' olayını görmezden gel.
+
+            if (sender == SuggestionPopupPre && !vm.IsSearchPerformed)
             {
+                // Arama ÖNCESİ (Pre) popup kapandı (ve durum hala Arama ÖNCESİ)
                 vm.IsSuggestionsOpen = false;
             }
+            else if (sender == SuggestionPopupPost && vm.IsSearchPerformed)
+            {
+                // Arama SONRASI (Post) popup kapandı (ve durum hala Arama SONRASI)
+                vm.IsSuggestionsOpen = false;
+            }
+
+            // Eğer sender == SuggestionPopupPre ama vm.IsSearchPerformed == true ise
+            // (yani arama yapıldı ve eski popup bir şekilde 'Closed' tetikledi),
+            // bu durumu görmezden gel. Tersi de geçerli.
+            // --- DEĞİŞİKLİK BURADA BİTİYOR ---
         }
+        private bool CanLivePreview(string ext)
+        {
+            return ext switch
+            {
+                ".txt" => true,
+                ".log" => true,
+                ".json" => true,
+                ".xml" => true,
+                ".csv" => true,
+                ".html" => true,
+                ".htm" => true,
+                _ => false
+            };
+        }
+        private bool CanReportPreview(string ext)
+        {
+            return ext switch
+            {
+                ".pdf" => true,
+                ".docx" => true,
+                ".xlsx" => true,
+                ".pptx" => true,
+                ".doc" => true,
+                ".xls" => true,
+                _ => false
+            };
+        }
+
+
     }
 }

@@ -1,177 +1,155 @@
-﻿using System;
+﻿using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
-using Microsoft.Data.Sqlite;
-using Microsoft.Extensions.Logging;
 
 namespace WpfIndexer.Services
 {
     public class SearchHistoryService
     {
-        private readonly string _dbPath = Path.Combine(
-            AppDomain.CurrentDomain.BaseDirectory,
-            "search_history.db");
-
+        private readonly string _dbPath;
         private readonly ILogger<SearchHistoryService> _logger;
 
-        // YENİ: Kullanıcının istediği 500 kayıt limiti
-        private const int MaxHistoryRecords = 500;
+        private const int MaxHistoryCount = 1000;   // Veritabanında tutulacak EN FAZLA kayıt
+        private const int SuggestionLimit = 10;      // Öneri listesinde gösterilecek en fazla kayıt
 
         public SearchHistoryService(ILogger<SearchHistoryService> logger)
         {
             _logger = logger;
+            _dbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "search_history.db");
         }
 
-        private SqliteConnection GetConnection() => new SqliteConnection($"Data Source={_dbPath}");
-
+        // -------------------------------------------------------------
+        // VERİTABANI OLUŞTURMA
+        // -------------------------------------------------------------
         public async Task InitializeDatabaseAsync()
         {
-            // ... (Bu metot aynı kalıyor) ...
             try
             {
-                using var connection = GetConnection();
+                using var connection = new SqliteConnection($"Data Source={_dbPath}");
                 await connection.OpenAsync();
-                var command = connection.CreateCommand();
-                command.CommandText = @"
-                    CREATE TABLE IF NOT EXISTS SearchHistory (
-                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        Term TEXT NOT NULL UNIQUE,
-                        SearchCount INTEGER NOT NULL DEFAULT 1,
-                        LastSearchDate TEXT NOT NULL
-                    );
-                ";
-                await command.ExecuteNonQueryAsync();
+
+                string tableSql =
+                @"CREATE TABLE IF NOT EXISTS SearchHistory (
+                      Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      Term TEXT NOT NULL,
+                      CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP
+                  );";
+
+                using var cmd = new SqliteCommand(tableSql, connection);
+                await cmd.ExecuteNonQueryAsync();
+
+                _logger.LogInformation("SearchHistoryService: Veritabanı hazır.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "SearchHistory veritabanı tablosu oluşturulamadı.");
+                _logger.LogError(ex, "SearchHistoryService: Veritabanı oluşturulurken hata.");
             }
         }
 
+        // -------------------------------------------------------------
+        // KAYIT EKLEME (TOP-N KONTROLÜ İLE)
+        // -------------------------------------------------------------
         public async Task AddSearchTermAsync(string term)
         {
             if (string.IsNullOrWhiteSpace(term)) return;
 
-            term = term.Trim();
-
             try
             {
-                using var connection = GetConnection();
+                using var connection = new SqliteConnection($"Data Source={_dbPath}");
                 await connection.OpenAsync();
 
-                var insertCommand = connection.CreateCommand();
-                insertCommand.CommandText = @"
-                    INSERT INTO SearchHistory (Term, LastSearchDate)
-                    VALUES ($term, $date);
-                ";
-                insertCommand.Parameters.AddWithValue("$term", term);
-                insertCommand.Parameters.AddWithValue("$date", DateTime.UtcNow.ToString("o"));
-
-                try
+                // Önce ekle
+                string insertSql = @"INSERT INTO SearchHistory (Term) VALUES (@term);";
+                using (var cmd = new SqliteCommand(insertSql, connection))
                 {
-                    await insertCommand.ExecuteNonQueryAsync();
+                    cmd.Parameters.AddWithValue("@term", term);
+                    await cmd.ExecuteNonQueryAsync();
                 }
-                catch (SqliteException ex) when (ex.SqliteErrorCode == 19) // UNIQUE constraint violation
+
+                // Şimdi TOP-N'yi koru
+                string countSql = "SELECT COUNT(*) FROM SearchHistory;";
+                using (var countCmd = new SqliteCommand(countSql, connection))
                 {
-                    var updateCommand = connection.CreateCommand();
-                    updateCommand.CommandText = @"
-                        UPDATE SearchHistory
-                        SET SearchCount = SearchCount + 1, LastSearchDate = $date
-                        WHERE Term = $term;
-                    ";
-                    updateCommand.Parameters.AddWithValue("$term", term);
-                    updateCommand.Parameters.AddWithValue("$date", DateTime.UtcNow.ToString("o"));
-                    await updateCommand.ExecuteNonQueryAsync();
+                    long count = (long)await countCmd.ExecuteScalarAsync();
+                    if (count > MaxHistoryCount)
+                    {
+                        long deleteCount = count - MaxHistoryCount;
+                        string deleteSql =
+                            @"DELETE FROM SearchHistory
+                              WHERE Id IN (SELECT Id FROM SearchHistory ORDER BY CreatedAt ASC LIMIT @n);";
+
+                        using var deleteCmd = new SqliteCommand(deleteSql, connection);
+                        deleteCmd.Parameters.AddWithValue("@n", deleteCount);
+                        await deleteCmd.ExecuteNonQueryAsync();
+
+                        _logger.LogInformation("SearchHistoryService: Eski kayıtlar silindi ({Count}).", deleteCount);
+                    }
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Arama terimi eklenirken/güncellenirken hata oluştu: {Term}", term);
-            }
-            finally
-            {
-                // YENİ: Ekleme yaptıktan sonra veritabanını 500 kayıtla sınırla
-                await PruneHistoryAsync();
+                _logger.LogError(ex, "SearchHistoryService.AddSearchTermAsync: Hata oluştu.");
             }
         }
 
-        public async Task<List<string>> GetSuggestionsAsync(string partialTerm, int limit = 10)
+        // -------------------------------------------------------------
+        // ARAMA ÖNERİLERİ (LIKE sorgusu + LIMIT)
+        // -------------------------------------------------------------
+        public async Task<List<string>> GetSuggestionsAsync(string query, int limit = SuggestionLimit)
         {
-            // ... (Bu metot aynı kalıyor) ...
-            var suggestions = new List<string>();
-            if (string.IsNullOrWhiteSpace(partialTerm)) return suggestions;
+            var list = new List<string>();
 
             try
             {
-                using var connection = GetConnection();
+                using var connection = new SqliteConnection($"Data Source={_dbPath}");
                 await connection.OpenAsync();
-                var command = connection.CreateCommand();
-                command.CommandText = @"
-                    SELECT Term FROM SearchHistory
-                    WHERE Term LIKE $term || '%' 
-                    ORDER BY SearchCount DESC, LastSearchDate DESC
-                    LIMIT $limit;
-                ";
-                command.Parameters.AddWithValue("$term", partialTerm.Trim());
-                command.Parameters.AddWithValue("$limit", limit);
 
-                using var reader = await command.ExecuteReaderAsync();
+                string sql =
+                    @"SELECT DISTINCT Term
+                      FROM SearchHistory
+                      WHERE Term LIKE @q
+                      ORDER BY CreatedAt DESC
+                      LIMIT @limit;";
+
+                using var cmd = new SqliteCommand(sql, connection);
+                cmd.Parameters.AddWithValue("@q", $"{query}%");
+                cmd.Parameters.AddWithValue("@limit", limit);
+
+                using var reader = await cmd.ExecuteReaderAsync();
                 while (await reader.ReadAsync())
                 {
-                    suggestions.Add(reader.GetString(0));
+                    list.Add(reader.GetString(0));
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Arama önerileri alınırken hata oluştu: {PartialTerm}", partialTerm);
+                _logger.LogError(ex, "SearchHistoryService.GetSuggestionsAsync: Hata oluştu.");
             }
-            return suggestions;
+
+            return list;
         }
 
+        // -------------------------------------------------------------
+        // TÜM GEÇMİŞİ TEMİZLEME
+        // -------------------------------------------------------------
         public async Task ClearHistoryAsync()
         {
-            // ... (Bu metot aynı kalıyor) ...
             try
             {
-                using var connection = GetConnection();
+                using var connection = new SqliteConnection($"Data Source={_dbPath}");
                 await connection.OpenAsync();
-                var command = connection.CreateCommand();
-                command.CommandText = "DELETE FROM SearchHistory;";
-                await command.ExecuteNonQueryAsync();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Arama geçmişi (SQLite) temizlenirken hata oluştu.");
-            }
-        }
 
-        // YENİ METOT: Veritabanını en son 500 kayıtla sınırlar
-        private async Task PruneHistoryAsync(int limit = MaxHistoryRecords)
-        {
-            try
-            {
-                using var connection = GetConnection();
-                await connection.OpenAsync();
-                var command = connection.CreateCommand();
-                // Son 500 kaydın ID'si DIŞINDAKİ tüm kayıtları sil
-                command.CommandText = $@"
-                    DELETE FROM SearchHistory
-                    WHERE Id NOT IN (
-                        SELECT Id FROM SearchHistory
-                        ORDER BY LastSearchDate DESC
-                        LIMIT {limit}
-                    );
-                ";
-                int rowsDeleted = await command.ExecuteNonQueryAsync();
-                if (rowsDeleted > 0)
-                {
-                    _logger.LogInformation("{Count} adet eski arama geçmişi kaydı silindi.", rowsDeleted);
-                }
+                using var cmd = new SqliteCommand("DELETE FROM SearchHistory;", connection);
+                await cmd.ExecuteNonQueryAsync();
+
+                _logger.LogInformation("SearchHistoryService: Tüm geçmiş silindi.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Arama geçmişi (SQLite) temizlenirken (Prune) hata oluştu.");
+                _logger.LogError(ex, "SearchHistoryService.ClearHistoryAsync: Hata oluştu.");
             }
         }
     }

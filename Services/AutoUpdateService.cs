@@ -9,10 +9,6 @@ using WpfIndexer.Models;
 
 namespace WpfIndexer.Services
 {
-    /// <summary>
-    /// Uygulama başlangıcında ve dosya değişikliklerinde
-    /// indeksleri sessizce güncelleyen arka plan servisi.
-    /// </summary>
     public class AutoUpdateService : IDisposable
     {
         private readonly IIndexService _indexService;
@@ -20,22 +16,21 @@ namespace WpfIndexer.Services
         private readonly UserSettingsService _userSettingsService;
         private readonly ILogger<AutoUpdateService> _logger;
 
-        // DÜZELTME (CS8618): Olayın (event) null olması normaldir, '?' ekliyoruz.
         public event Action<string>? StatusChanged;
 
-        private readonly List<FileSystemWatcher> _watchers = new List<FileSystemWatcher>();
+        private readonly List<FileSystemWatcher> _watchers = new();
+        private CancellationTokenSource? _cts;
+        private Task? _workerTask;
 
-        // DÜZELTME (CS8618): Bu Timer, constructor'da değil Start() metodunda
-        // başlatıldığı için nullable ('?') olmalıdır.
-        private Timer? _startupTimer;
+        private volatile bool _isRunning = false;
+        private volatile bool _pendingUpdate = false;
+        private string _lastStatus = "";
 
-        private Timer _debounceTimer; // Bu constructor'da atanıyor, sorun yok.
-        private volatile bool _isChecking = false;
-        private string _lastStatusMessage = "";
+        // Kontrol aralıkları
+        private const int WorkerDelay = 2000;         // 2 saniyede bir worker kontrolü
+        private const int DebounceDelay = 8000;       // Dosya değişikliği sonrası 8 saniye bekleme
 
-        // Not: Sizin 3000ms (3sn) ve 6000ms (6sn) ayarlarınızı koruyorum.
-        private const int StartupDelay = 10000;     // 10 saniye
-        private const int DebouncePeriod = 500000;   // 500 saniye
+        private DateTime _lastChangeTime = DateTime.MinValue;
 
         public AutoUpdateService(
             IIndexService indexService,
@@ -47,162 +42,185 @@ namespace WpfIndexer.Services
             _indexSettingsService = indexSettingsService;
             _userSettingsService = userSettingsService;
             _logger = logger;
-            _debounceTimer = new Timer(OnDebounceTimerElapsed, null, Timeout.Infinite, Timeout.Infinite);
-            // _startupTimer burada atanmadığı için CS8618 uyarısı alıyordunuz.
         }
 
         public void Start()
         {
             if (!_userSettingsService.Settings.AutoUpdateEnabled)
             {
-                _logger.LogInformation("Otomatik güncelleme servisi ayarlardan kapatılmış.");
+                _logger.LogInformation("AutoUpdateService devre dışı.");
                 return;
             }
 
-            // DÜZELTME (CS8622): Timer'ın 'state' parametresi null olabilir (object?)
-            _startupTimer = new Timer(OnStartupTimerElapsed, null, StartupDelay, Timeout.Infinite);
             InitializeWatchers();
-            _logger.LogInformation("AutoUpdateService başlatıldı. 3 saniye sonra ilk kontrol yapılacak.");
+
+            _cts = new CancellationTokenSource();
+            _workerTask = Task.Run(() => WorkerLoopAsync(_cts.Token));
+
+            _logger.LogInformation("AutoUpdateService başlatıldı (worker aktif).");
         }
 
         private void InitializeWatchers()
         {
-            var indexesToWatch = _indexSettingsService.Indexes
-                .Where(i => !string.IsNullOrEmpty(i.SourcePath) && Directory.Exists(i.SourcePath));
-
-            foreach (var index in indexesToWatch)
+            foreach (var index in _indexSettingsService.Indexes)
             {
+                if (string.IsNullOrEmpty(index.SourcePath)) continue;
+                if (!Directory.Exists(index.SourcePath)) continue;
+
                 try
                 {
-                    // DÜZELTME (CS8604): .Where filtresi sayesinde SourcePath'in
-                    // null olmadığını biliyoruz. '!' ile derleyiciye güvence veriyoruz.
-                    var watcher = new FileSystemWatcher(index.SourcePath!)
+                    var watcher = new FileSystemWatcher(index.SourcePath)
                     {
-                        NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName,
+                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
                         IncludeSubdirectories = true,
                         EnableRaisingEvents = true
                     };
-                    watcher.Changed += OnFileSystemChanged;
-                    watcher.Created += OnFileSystemChanged;
-                    watcher.Deleted += OnFileSystemChanged;
-                    watcher.Renamed += OnFileSystemChanged;
+
+                    watcher.Changed += OnFileChanged;
+                    watcher.Created += OnFileChanged;
+                    watcher.Renamed += OnFileChanged;
+                    watcher.Deleted += OnFileChanged;
+
                     _watchers.Add(watcher);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "{Path} klasörü izlenemiyor.", index.SourcePath);
+                    _logger.LogWarning(ex, "Klasör izlenemiyor: {Path}", index.SourcePath);
                 }
             }
         }
 
-        private void OnFileSystemChanged(object sender, FileSystemEventArgs e)
+        private void OnFileChanged(object sender, FileSystemEventArgs e)
         {
-            // DÜZELTME (CS8602): e.Name null olabilir, önce onu kontrol et.
-            if (e.Name == null || e.Name.Contains("wpfindexer.update.lock") || e.Name.StartsWith("~"))
+            if (e.Name == null) return;
+            if (e.Name.StartsWith("~") || e.Name.Contains("wpfindexer.update.lock"))
                 return;
 
-            _logger.LogInformation("Dosya değişikliği algılandı: {File}.", e.Name);
-            _debounceTimer.Change(DebouncePeriod, Timeout.Infinite);
+            _logger.LogInformation("Dosya değişti: {File}", e.Name);
+
+            _pendingUpdate = true;
+            _lastChangeTime = DateTime.Now;
         }
 
-        // DÜZELTME (CS8622): 'state' parametresi null olabilir (object?)
-        private async void OnStartupTimerElapsed(object? state)
+        private async Task WorkerLoopAsync(CancellationToken token)
         {
-            await CheckAllIndexesAsync("Başlangıç kontrolü");
-        }
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    // AutoUpdate kapalı ise tamamen uyur
+                    if (!_userSettingsService.Settings.AutoUpdateEnabled)
+                    {
+                        await Task.Delay(WorkerDelay, token);
+                        continue;
+                    }
 
-        // DÜZELTME (CS8622): 'state' parametresi null olabilir (object?)
-        private async void OnDebounceTimerElapsed(object? state)
-        {
-            await CheckAllIndexesAsync("Dosya değişikliği");
-        }
+                    // Henüz değişiklik olmadı → uyku
+                    if (!_pendingUpdate)
+                    {
+                        await Task.Delay(WorkerDelay, token);
+                        continue;
+                    }
 
-        public string GetLastStatusMessage() => _lastStatusMessage;
+                    // Debounce süresi tamamlanmadı → bekle
+                    if ((DateTime.Now - _lastChangeTime).TotalMilliseconds < DebounceDelay)
+                    {
+                        await Task.Delay(WorkerDelay, token);
+                        continue;
+                    }
 
-        private void NotifyStatus(string message)
-        {
-            _lastStatusMessage = message;
-            // StatusChanged artık nullable (?) olduğu için, '?.' ile çağırmak zaten güvenli.
-            StatusChanged?.Invoke(message);
+                    // Zaten çalışıyor ise bekle
+                    if (_isRunning)
+                    {
+                        await Task.Delay(WorkerDelay, token);
+                        continue;
+                    }
+
+                    _isRunning = true;
+                    _pendingUpdate = false;
+
+                    await CheckAllIndexesAsync("Watcher");
+
+                    _isRunning = false;
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Worker döngüsü hatası.");
+                }
+            }
         }
 
         private async Task CheckAllIndexesAsync(string trigger)
         {
-            if (_isChecking) return;
-            if (!_userSettingsService.Settings.AutoUpdateEnabled) return;
+            NotifyStatus($"Güncelleme kontrolü ({trigger})...");
+            _logger.LogInformation("AutoUpdate tetiklendi ({Trigger})", trigger);
 
-            _isChecking = true;
-            _logger.LogInformation("Otomatik güncelleme kontrolü başladı. Tetikleyen: {Trigger}", trigger);
-            NotifyStatus("Güncellemeler kontrol ediliyor...");
-
-            var indexesToUpdate = _indexSettingsService.Indexes
-                .Where(i => !string.IsNullOrEmpty(i.SourcePath));
-
-            foreach (var index in indexesToUpdate)
+            foreach (var index in _indexSettingsService.Indexes)
             {
+                if (!Directory.Exists(index.SourcePath)) continue;
                 await CheckSingleIndexAsync(index);
             }
 
             NotifyStatus("Kontrol tamamlandı.");
-            _isChecking = false;
         }
 
         private async Task CheckSingleIndexAsync(IndexDefinition index)
         {
             try
             {
-                var progress = new Progress<ProgressReportModel>(report =>
+                var progress = new Progress<ProgressReportModel>(r =>
                 {
-                    if (!string.IsNullOrEmpty(report.CurrentFile))
-                        NotifyStatus($"Güncelleniyor ({index.Name}): {Path.GetFileName(report.CurrentFile)}");
-                    else if (report.IsIndeterminate)
-                        NotifyStatus($"{index.Name} için {report.Message}...");
+                    if (!string.IsNullOrWhiteSpace(r.CurrentFile))
+                        NotifyStatus($"{index.Name}: {Path.GetFileName(r.CurrentFile)} güncelleniyor...");
                 });
 
-                // DÜZELTME (CS8604): SourcePath'in null olmadığını '!' ile,
-                // Extensions'ın null olabileceğini '??' ile belirtiyoruz.
                 var result = await _indexService.UpdateIndexAsync(
-                    index.SourcePath!, // .Where ile null olamaz
+                    index.SourcePath!,
                     index.IndexPath,
-                    index.Extensions ?? new List<string>(), // Null ise boş liste kullan
+                    index.Extensions ?? new List<string>(),
                     progress,
                     CancellationToken.None,
                     index.OcrQuality
                 );
 
-                int changes = result.Added.Count + result.Updated.Count + result.Deleted.Count;
-                if (changes > 0)
-                {
-                    _logger.LogInformation("{IndexName} güncellendi: {Changes} dosya etkilendi.", index.Name, changes);
-                    NotifyStatus($"{index.Name} güncellendi: {changes} dosya etkilendi.");
-                }
+                var total = result.Added.Count + result.Updated.Count + result.Deleted.Count;
+
+                if (total > 0)
+                    NotifyStatus($"{index.Name} güncellendi ({total} değişiklik).");
             }
             catch (Exception ex)
             {
-                if (ex.Message.Contains("başka bir bilgisayar") || ex.Message.Contains("güncelleniyor"))
-                {
-                    _logger.LogInformation("{IndexName} kilitli, güncelleme atlandı.", index.Name);
-                    NotifyStatus($"{index.Name} meşgul, güncelleme atlandı.");
-                }
-                else
-                {
-                    _logger.LogError(ex, "{IndexName} otomatik güncellenirken hata oluştu.", index.Name);
-                    NotifyStatus($"{index.Name} güncellenirken hata oluştu.");
-                }
+                _logger.LogError(ex, "{IndexName} güncelleme hatası.", index.Name);
+                NotifyStatus($"{index.Name} güncellenirken hata.");
             }
         }
 
+        private void NotifyStatus(string msg)
+        {
+            _lastStatus = msg;
+            StatusChanged?.Invoke(msg);
+        }
+
+        public string GetLastStatusMessage() => _lastStatus;
+
         public void Dispose()
         {
-            // _startupTimer artık nullable olduğu için '?.' ile dispose etmek zaten doğru.
-            _startupTimer?.Dispose();
-            _debounceTimer?.Dispose();
-            foreach (var watcher in _watchers)
+            try
             {
-                watcher.EnableRaisingEvents = false;
-                watcher.Dispose();
+                _cts?.Cancel();
+                _cts?.Dispose();
+                foreach (var w in _watchers)
+                {
+                    w.EnableRaisingEvents = false;
+                    w.Dispose();
+                }
+                _watchers.Clear();
             }
-            _watchers.Clear();
+            catch { }
         }
     }
 }

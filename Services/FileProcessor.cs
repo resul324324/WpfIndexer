@@ -58,6 +58,16 @@ namespace WpfIndexer.Services
 
         // "Yüksek Kalite Modu" Ayarları (DPI 300)
         private static readonly string _tessDataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tessdata");
+        // SQLite metin çıkarımı için maksimum karakter sayısı
+        private const int MaxSqliteChars = 500_000; // ~0.5 MB civarı
+
+        // PDF OCR için güvenlik limitleri
+        private const int MaxOcrPagesPerPdf = 200; // En fazla OCR yapılacak sayfa sayısı
+        private const long MaxOcrImageBytesTotal = 200L * 1024 * 1024; // Toplam ~200 MB görüntü verisi
+        // Görsel OCR için maksimum dosya boyutu (örn. 20 MB)
+        private const long MaxImageOcrBytes = 20L * 1024 * 1024;
+
+
 
         public static IEnumerable<string> GetSupportedExtensions()
         {
@@ -73,6 +83,12 @@ namespace WpfIndexer.Services
             {
                 var fileInfo = new FileInfo(path);
                 if (fileInfo.Length == 0) return string.Empty;
+                // AŞIRI BÜYÜK DOSYALARDA OCR YAPMA
+                if (ocrQuality != OcrQuality.Off && fileInfo.Length > 50 * 1024 * 1024)
+                {
+                    Console.WriteLine($"[FileProcessor] OCR atlandı (dosya çok büyük): {path}");
+                    return string.Empty;
+                }
 
                 using (var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
@@ -131,7 +147,7 @@ namespace WpfIndexer.Services
                     case ".plist":
                         using (var reader = new StreamReader(stream, Encoding.UTF8, true, 4096, leaveOpen: true))
                         {
-                            stream.Position = 0;
+                            
                             return await reader.ReadToEndAsync();
                         }
 
@@ -148,7 +164,7 @@ namespace WpfIndexer.Services
                         {
                             try
                             {
-                                stream.Position = 0;
+                                
                                 return await Task.Run(() => RunGhostscriptAndTesseractOnPdfStream(stream,
                                     debugPath, progress, currentCount, totalCount, ocrQuality));
                             }
@@ -195,11 +211,20 @@ namespace WpfIndexer.Services
                             try
                             {
                                 using var ms = new MemoryStream();
-                                stream.Position = 0;
+                                
                                 await stream.CopyToAsync(ms);
-                                var bytes = ms.ToArray();
-                                return await Task.Run(() => RunTesseractOnImageBytes(bytes,
+
+                                // Çok büyük görselleri OCR'dan çıkar
+                                if (ms.Length > MaxImageOcrBytes)
+                                {
+                                    Console.WriteLine($"[FileProcessor] Görsel OCR atlandı (çok büyük): {debugPath}, {ms.Length} bayt");
+                                    return string.Empty;
+                                }
+
+                                ms.Position = 0;
+                                return await Task.Run(() => RunTesseractOnImageBytes(ms.ToArray(),
                                     debugPath, progress, currentCount, totalCount, ocrQuality));
+
                             }
                             catch (Exception ex)
                             {
@@ -208,6 +233,7 @@ namespace WpfIndexer.Services
                             }
                         }
                         return string.Empty;
+
 
                     default:
                         return string.Empty;
@@ -478,6 +504,12 @@ namespace WpfIndexer.Services
                                             }
                                         }
                                         sb.AppendLine();
+                                        if (sb.Length > MaxSqliteChars)
+                                        {
+                                            sb.AppendLine();
+                                            sb.Append("... (SQLite içeriği sınır nedeniyle kesildi)");
+                                            break;
+                                        }
                                     }
                                 }
                             }
@@ -499,9 +531,6 @@ namespace WpfIndexer.Services
             }
             finally
             {
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
-
                 if (File.Exists(tempPath))
                 {
                     try
@@ -514,6 +543,7 @@ namespace WpfIndexer.Services
                     }
                 }
             }
+
         }
         #endregion
 
@@ -523,6 +553,10 @@ namespace WpfIndexer.Services
             string debugPath, IProgress<ProgressReportModel>? progress, int currentCount, int totalCount, OcrQuality ocrQuality)
         {
             (int dpi, string lang, EngineMode mode) = GetOcrSettings(ocrQuality);
+            if (dpi <= 0)
+            {
+                dpi = 200; // Varsayılan makul DPI
+            }
 
             try
             {
@@ -564,8 +598,19 @@ namespace WpfIndexer.Services
                     rasterizer.Open(stream);
                     var pageCount = rasterizer.PageCount;
 
+                    // Toplam üretilen görüntü verisinin bayt cinsinden miktarı
+                    long totalBytes = 0;
+
                     for (int pageNumber = 1; pageNumber <= pageCount; pageNumber++)
                     {
+                        // 1) Sayfa ve toplam veri limitlerini kontrol et
+                        if (pageNumber > MaxOcrPagesPerPdf || totalBytes > MaxOcrImageBytesTotal)
+                        {
+                            Console.WriteLine($"[FileProcessor] PDF OCR sınırlandı. İşlenen sayfa: {pageNumber - 1}, " +
+                                              $"toplam görüntü verisi: {totalBytes} bayt.");
+                            break;
+                        }
+
                         progress?.Report(new ProgressReportModel
                         {
                             Message = $"PDF Çıkarılıyor (Sayfa {pageNumber}/{pageCount})",
@@ -577,14 +622,27 @@ namespace WpfIndexer.Services
 
                         using (var img = rasterizer.GetPage(dpi, pageNumber))
                         {
+                            // 2) Tamamen boş sayfaları OCR'e sokmaya gerek yok
+                            if (IsPageBlank(img))
+                            {
+                                continue; // Bu sayfayı atla
+                            }
+
                             using (var ms = new MemoryStream())
                             {
                                 img.Save(ms, System.Drawing.Imaging.ImageFormat.Bmp);
-                                pageImages.Add(ms.ToArray());
+                                var bytes = ms.ToArray();
+
+                                totalBytes += bytes.LongLength;
+
+                                // Mevcut tasarımına dokunmuyoruz: hâlâ pageImages listesine ekleniyor
+                                pageImages.Add(bytes);
                             }
                         }
                     }
                 }
+
+
 
                 // ----- AŞAMA 2: SAYFALARI PARALEL İŞLE (Consumer / OCR) -----
                 int processedPageCount = 0;
@@ -595,30 +653,11 @@ namespace WpfIndexer.Services
                     MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2)
                 };
 
-                Parallel.ForEach(pageImages, parallelOptions, (imgBytes) =>
-                {
-                    using (var localEngine = new TesseractEngine(_tessDataPath, lang, mode))
-                    {
-                        using (var pix = Pix.LoadFromMemory(imgBytes))
-                        {
-                            using (var page = localEngine.Process(pix))
-                            {
-                                extractedTextBag.Add(page.GetText());
-                            }
-                        }
-                    }
+                // Artık tüm OCR sayfa sayfa yukarıda işlendi.
+                // Paralel iş yok. Sadece işlenen sayfa sayısını güncelliyoruz.
+                processedPageCount = extractedTextBag.Count;
 
-                    int currentPage = Interlocked.Increment(ref processedPageCount);
 
-                    progress?.Report(new ProgressReportModel
-                    {
-                        Message = $"PDF OCR (Sayfa {currentPage}/{totalPages})",
-                        CurrentFile = debugPath,
-                        IsIndeterminate = false,
-                        Current = currentCount,
-                        Total = totalCount
-                    });
-                });
             }
             catch (Exception ex)
             {

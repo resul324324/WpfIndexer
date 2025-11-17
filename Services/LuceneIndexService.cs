@@ -24,6 +24,18 @@ namespace WpfIndexer.Services
         private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
         private readonly ILogger<LuceneIndexService> _logger;
         private readonly HashSet<string> _archiveExtensions = new() { ".zip", ".rar", ".7z", ".tar" };
+        // Arşiv tarama cache – ZIP/RAR tekrar tekrar açılmasın
+        private readonly Dictionary<string, List<(string EntryKey, long Ticks, long Size)>> _archiveCache
+            = new(StringComparer.OrdinalIgnoreCase);
+        // --- MADDE 16: READER & SEARCHER CACHE ---
+        private readonly Dictionary<string, DirectoryReader> _readerCache
+            = new(StringComparer.OrdinalIgnoreCase);
+
+        private readonly Dictionary<string, IndexSearcher> _searcherCache
+            = new(StringComparer.OrdinalIgnoreCase);
+
+
+
 
         private IndexWriter? _writer;
         private HashSet<string>? _extHashSet;
@@ -31,6 +43,7 @@ namespace WpfIndexer.Services
         private int _fileCount;
         private int _totalCount;
         private int _maxOcrWorkers = Math.Max(1, Environment.ProcessorCount / 2);
+        private const int MaxArchiveEntries = 2000;
 
         private const int MaxLockAgeInMinutes = 60;
         // YENİ: Kilit dosyamızın adı
@@ -214,9 +227,11 @@ namespace WpfIndexer.Services
                         // Veriyi bir sonraki commit'e ekle
                         _writer.SetCommitData(commitData);
 
-                  
+
                         _writer.Commit();
-                        
+                        RefreshIndex(indexPath);
+
+
                     }
                 }).ConfigureAwait(false);
             }
@@ -333,7 +348,11 @@ namespace WpfIndexer.Services
                                             if (needsOcr) ocrSemaphore.Release();
                                         }
                                     }
-                                    catch (Exception) { /* skip */ }
+                                    catch (Exception ex)
+                                    {
+                                        _logger.LogWarning(ex, "ScanItem: Arşiv okunamadı: {ArchivePath}", path);
+                                    }
+
                                     finally { sem.Release(); }
                                 }, token));
                             }
@@ -370,13 +389,16 @@ namespace WpfIndexer.Services
                             { "Extensions", string.Join(";", extensionsToInclude) },
 
                             // Sizin eklediğiniz tarih meta verileri
-                            { "CreationDate", DateTime.UtcNow.ToString("o") },
+                            { "CreationDate", (existingMetadata?.CreationDate ?? DateTime.UtcNow).ToString("o") },
                             { "LastUpdateDate", DateTime.UtcNow.ToString("o") }
+
 };
 
                         // Veriyi bir sonraki commit'e ekle ve commit'i zorla
                         _writer.SetCommitData(commitData);
                         _writer.Commit();
+                        RefreshIndex(indexPath);
+
                     }
                 }).ConfigureAwait(false);
             }
@@ -392,6 +414,64 @@ namespace WpfIndexer.Services
             }
 
             return updateResult;
+        }
+        private (DirectoryReader reader, IndexSearcher searcher) GetCachedSearcher(string indexPath)
+        {
+            // 1) READER CACHE
+            if (!_readerCache.TryGetValue(indexPath, out var reader) || reader == null)
+            {
+                var dir = FSDirectory.Open(indexPath);
+                reader = DirectoryReader.Open(dir);
+                _readerCache[indexPath] = reader;
+            }
+
+            // 2) SEARCHER CACHE
+            if (!_searcherCache.TryGetValue(indexPath, out var searcher) || searcher == null)
+            {
+                searcher = new IndexSearcher(reader);
+                _searcherCache[indexPath] = searcher;
+            }
+
+            return (reader, searcher);
+        }
+        // --- MADDE 17: READER / SEARCHER YENİLEME ---
+        private void RefreshIndex(string indexPath)
+        {
+            try
+            {
+                // Mevcut reader var mı?
+                if (_readerCache.TryGetValue(indexPath, out var oldReader) && oldReader != null)
+                {
+                    // Yeni segment varsa yeni reader üret
+                    var newReader = DirectoryReader.OpenIfChanged(oldReader);
+
+                    if (newReader != null)
+                    {
+                        // Eski reader'ı kapat
+                        oldReader.Dispose();
+
+                        // Cache'i güncelle
+                        _readerCache[indexPath] = newReader;
+
+                        // Searcher'ı yenile
+                        _searcherCache[indexPath] = new IndexSearcher(newReader);
+
+                        _logger.LogInformation("Index refreshed: {Path}", indexPath);
+                    }
+                }
+                else
+                {
+                    // Daha önce hiç açılmamışsa sıfırdan oluştur
+                    var dir = FSDirectory.Open(indexPath);
+                    var newReader = DirectoryReader.Open(dir);
+                    _readerCache[indexPath] = newReader;
+                    _searcherCache[indexPath] = new IndexSearcher(newReader);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "RefreshIndex hata: {Path}", indexPath);
+            }
         }
 
         // DİKKAT: Dönüş tipi Task<List<SearchResult>> -> Task<LuceneSearchResponse> olarak değişti
@@ -410,7 +490,9 @@ namespace WpfIndexer.Services
                 try
                 {
                     analyzer = new StandardAnalyzer(AppLuceneVersion);
-                    var parser = new MultiFieldQueryParser(AppLuceneVersion, new[] { "filename", "content", "path" }, analyzer);
+                    var parser = new MultiFieldQueryParser(AppLuceneVersion,
+                     new[] { "filename", "content_index", "path" }, analyzer);
+
 
                     // YENİ ÇÖZÜM: Başına * (joker) konulmuş aramaları etkinleştir
                     parser.AllowLeadingWildcard = true;
@@ -433,65 +515,38 @@ namespace WpfIndexer.Services
                     foreach (var path in paths)
                     {
                         var indexName = new DirectoryInfo(path).Name;
-                        using var dir = FSDirectory.Open(path);
-                        if (!Directory.Exists(path) || !DirectoryReader.IndexExists(dir))
-                        {
-                            continue;
-                        }
-                        using var reader = DirectoryReader.Open(dir);
-                        var searcher = new IndexSearcher(reader);
+
+                        var (reader, searcher) = GetCachedSearcher(path);
+
                         var hits = searcher.Search(luceneQuery, maxResults).ScoreDocs;
 
-                        // ====================================================================
-                        // >>>>>>>> ADIM 2 DEĞİŞİKLİĞİ BURADA BAŞLIYOR <<<<<<<<<
-                        // ====================================================================
                         foreach (var hit in hits)
                         {
                             var doc = searcher.Doc(hit.Doc);
 
-                            // --- YENİ EKLENEN VERİ ÇEKME İŞLEMLERİ ---
-
-                            // 1. Path (zaten vardı, sadece değişken adı alalım)
-                            string docPath = doc.Get("path_exact") ?? string.Empty;
-                            if (string.IsNullOrEmpty(docPath)) continue; // Path yoksa atla
-
-                            // 2. Tarihi al (Lucene'de Ticks olarak saklanmış)
                             long.TryParse(doc.GetField("modified_date")?.GetStringValue(), out long ticks);
-                            DateTime modificationDate = (ticks > 0) ? new DateTime(ticks) : DateTime.MinValue;
-
-                            // 3. Boyutu al (zaten vardı)
                             long.TryParse(doc.Get("size"), out long size);
 
-                            // 4. Klasör yolunu al (Sadece klasör)
-                            string directoryPath = Path.GetDirectoryName(docPath) ?? docPath; // Null gelirse path'in kendisidir (örn: C:\)
+                            string docPath = doc.Get("path_exact") ?? "";
+                            if (docPath.Length == 0) continue;
 
-                            // --- BİTTİ ---
-
-                            // 3. YENİ: Sonuçları 'response.Results'a ekle
-                            // SearchResult nesnesini YENİ özelliklerle oluştur
                             response.Results.Add(new SearchResult
                             {
-                                // Mevcut 'required' alanlar
                                 Path = docPath,
-                                FileName = doc.Get("filename") ?? System.IO.Path.GetFileName(docPath), // Fallback
-                                Extension = doc.Get("extension") ?? System.IO.Path.GetExtension(docPath), // Fallback
+                                FileName = doc.Get("filename") ?? System.IO.Path.GetFileName(docPath),
+                                Extension = doc.Get("extension") ?? System.IO.Path.GetExtension(docPath),
                                 IndexName = indexName,
 
-                                // Mevcut diğer alanlar
                                 Size = size,
-                                Snippet = string.Empty, // Snippet'i şimdilik boş başlatıyoruz. Vurgulama sonraki adım.
-
-                                // YENİ EKLENEN ALANLAR
-                                ModificationDate = modificationDate,
-                                DirectoryPath = directoryPath,
-                                FileType = string.Empty, // VM'de (sonraki adımda) doldurulacak
-                                FileIcon = null          // VM'de (sonraki adımda) doldurulacak
+                                Snippet = "",
+                                ModificationDate = (ticks > 0 ? new DateTime(ticks) : DateTime.MinValue),
+                                DirectoryPath = Path.GetDirectoryName(docPath) ?? docPath,
+                                FileType = "",
+                                FileIcon = null
                             });
                         }
-                        // ==================================================================
-                        // >>>>>>>> ADIM 2 DEĞİŞİKLİĞİ BURADA BİTİYOR <<<<<<<<<
-                        // ==================================================================
                     }
+
                 }
                 catch (ParseException pex)
                 {
@@ -500,8 +555,10 @@ namespace WpfIndexer.Services
                 }
                 catch (Exception ex)
                 {
-                    _progress?.Report(new ProgressReportModel { Message = $"Arama Hatası: {ex.Message}", IsIndeterminate = true });
+                    _logger.LogError(ex, "SearchAsync hata: Query = {Query}", query);
+                    _progress?.Report(new ProgressReportModel { Message = $"Arama Hatası: {ex.Message}" });
                 }
+
                 finally
                 {
                     analyzer?.Dispose();
@@ -514,7 +571,6 @@ namespace WpfIndexer.Services
 
         public async Task<string> GetContentByPathAsync(string indexPath, string filePath)
         {
-            // ... (Bu metot GÜNCELLENMEDİ, aynı kalıyor) ...
             return await Task.Run(() =>
             {
                 try
@@ -524,16 +580,30 @@ namespace WpfIndexer.Services
                     {
                         return "Hata: İndeks bulunamadı.";
                     }
+
                     using var reader = DirectoryReader.Open(dir);
                     var searcher = new IndexSearcher(reader);
+
                     var query = new TermQuery(new Term("path_exact", filePath));
                     var hits = searcher.Search(query, 1).ScoreDocs;
+
                     if (hits.Length > 0)
                     {
+                        // 1) Dokümanı al
                         var doc = searcher.Doc(hits[0].Doc);
-                        var content = doc.Get("content");
-                        return content ?? "(İçerik depolanmamış)";
+
+                        // 2) Sıkıştırılmış içeriği oku
+                        var binary = doc.GetBinaryValue("content");
+                        if (binary == null)
+                            return "(İçerik depolanmamış)";
+
+                        // BytesRef → byte[] çevirme
+                        byte[] compressed = binary.Bytes;
+
+                        return Decompress(compressed);
+
                     }
+
                     return "(Dosya indekste bulunamadı)";
                 }
                 catch (Exception ex)
@@ -542,6 +612,7 @@ namespace WpfIndexer.Services
                 }
             });
         }
+
 
         // YENİ METOT: İndeksten meta verileri okur
         // Adım 2'de IIndexService'te imzasını değiştirdiğimiz metodu burada uyguluyoruz.
@@ -633,7 +704,11 @@ namespace WpfIndexer.Services
                     }
                 }
             }
-            catch (Exception) { /* ignore */ }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "GetIndexState: Belge okunurken hata oluştu. Path: {IndexPath}", indexPath);
+            }
+
             return indexState;
         }
 
@@ -659,7 +734,11 @@ namespace WpfIndexer.Services
                     await ScanFileSystemRecursiveAsync(dir, systemFiles, token).ConfigureAwait(false);
                 }
             }
-            catch (UnauthorizedAccessException) { /* skip */ }
+            catch (UnauthorizedAccessException ex)
+            {
+                _logger.LogWarning(ex, "Erişim reddedildi: {Path}", path);
+            }
+
         }
 
         private void ScanItem(string path, Dictionary<string, (long Ticks, long Size)> systemFiles, CancellationToken token)
@@ -674,21 +753,44 @@ namespace WpfIndexer.Services
                 try
                 {
                     token.ThrowIfCancellationRequested();
-                    using var archive = ArchiveFactory.Open(path);
-                    foreach (var entry in archive.Entries)
+
+                    // 1) Cache varsa direk kullan
+                    if (!_archiveCache.TryGetValue(path, out var cachedEntries))
                     {
-                        token.ThrowIfCancellationRequested();
-                        if (entry.IsDirectory || entry.Key == null) continue;
-                        var entryExt = Path.GetExtension(entry.Key).ToLowerInvariant();
-                        if (_extHashSet?.Contains(entryExt) ?? false)
+                        cachedEntries = new List<(string EntryKey, long Ticks, long Size)>();
+
+                        using var archive = ArchiveFactory.Open(path);
+
+                        foreach (var entry in archive.Entries)
                         {
-                            var entryPath = $"{path}|{entry.Key}";
-                            systemFiles[entryPath] = (entry.LastModifiedTime?.Ticks ?? fi.LastWriteTimeUtc.Ticks, entry.Size);
+                            if (entry.IsDirectory || entry.Key == null)
+                                continue;
+
+                            var eExt = Path.GetExtension(entry.Key).ToLowerInvariant();
+                            if (!_extHashSet.Contains(eExt))
+                                continue;
+
+                            long ticks = entry.LastModifiedTime?.Ticks ?? fi.LastWriteTimeUtc.Ticks;
+                            cachedEntries.Add((entry.Key, ticks, entry.Size));
                         }
+
+                        // Cache’e ekle
+                        _archiveCache[path] = cachedEntries;
+                    }
+
+                    // 2) Cache'deki tüm entry’leri ekle
+                    foreach (var e in cachedEntries)
+                    {
+                        string entryPath = $"{path}||{e.EntryKey}";
+                        systemFiles[entryPath] = (e.Ticks, e.Size);
                     }
                 }
-                catch (Exception) { /* skip broken archives */ }
+                catch (Exception)
+                {
+                    // Arşiv bozuksa atla
+                }
             }
+
         }
 
         private async Task<Document?> CreateDocumentAsync(string path, string ext, Func<DateTime> lastModifiedFunc, long size, OcrQuality ocrQuality, CancellationToken token,
@@ -698,19 +800,52 @@ namespace WpfIndexer.Services
             string content;
             if (path.Contains("|"))
             {
-                var parts = path.Split('|', 2);
+                // Doğru split: sadece ilk | ayrılır
+                var parts = path.Split(new[] { "|" }, 2, StringSplitOptions.None);
+
+                // Güvenlik kontrolü: iki parça oluşmalı
+                if (parts.Length != 2)
+                {
+                    _logger.LogWarning("Arşiv içi dosya yolu hatalı: {Path}", path);
+                    return null;
+                }
+
+                string archivePath = parts[0];
+                string entryPath = parts[1];
+
                 try
                 {
                     token.ThrowIfCancellationRequested();
-                    using var archive = ArchiveFactory.Open(parts[0]);
-                    var entry = archive.Entries.FirstOrDefault(e => e.Key != null && e.Key.Replace("\\", "/") == parts[1].Replace("\\", "/"));
-                    if (entry == null) return null;
-                    await using var stream = entry.OpenEntryStream();
-                    content = await FileProcessor.ExtractTextFromStreamAsync(stream, ext, entry.Key!, ocrQuality,
-                        progress, currentCount, totalCount).ConfigureAwait(false);
+
+                    using var archive = ArchiveFactory.Open(archivePath);
+
+                    // Entry karşılaştırması normalize edilir
+                    var entry = archive.Entries
+                        .FirstOrDefault(e =>
+                            e.Key != null &&
+                            e.Key.Replace("\\", "/") == entryPath.Replace("\\", "/"));
+
+                    if (entry == null)
+                        return null;
+
+                    await using var entryStream = entry.OpenEntryStream();
+
+                    using var ms = new MemoryStream();
+                    await entryStream.CopyToAsync(ms, 81920, token).ConfigureAwait(false);
+                    ms.Position = 0;
+
+                    content = await FileProcessor.ExtractTextFromStreamAsync(
+                        ms, ext, entry.Key!, ocrQuality,
+                        progress, currentCount, totalCount
+                    ).ConfigureAwait(false);
                 }
-                catch (Exception) { return null; }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "CreateDocumentAsync: Arşiv girdisi işlenemedi. Path: {Path}", path);
+                    return null;
+                }
             }
+
             else
             {
                 content = await FileProcessor.ExtractTextAsync(path, ocrQuality,
@@ -719,15 +854,22 @@ namespace WpfIndexer.Services
             if (string.IsNullOrWhiteSpace(content)) content = "";
             var ticks = lastModifiedFunc.Invoke().Ticks;
             var doc = new Document
-            {
-                new TextField("path", path, Field.Store.NO),
-                new StringField("path_exact", path, Field.Store.YES),
-                new TextField("filename", Path.GetFileName(path), Field.Store.YES),
-                new StringField("extension", ext, Field.Store.YES),
-                new TextField("content", content, Field.Store.YES),
-                new StringField("modified_date", ticks.ToString(), Field.Store.YES),
-                new StringField("size", size.ToString(), Field.Store.YES)
-            };
+                {
+                    new TextField("path", path, Field.Store.NO),
+                    new StringField("path_exact", path, Field.Store.YES),
+                    new TextField("filename", Path.GetFileName(path), Field.Store.YES),
+                    new StringField("extension", ext, Field.Store.YES),
+
+                    // ✔ 1) Arama için kullanılan içerik
+                    new TextField("content_index", content, Field.Store.NO),
+
+                    // ✔ 2) Rapor modu için saklanan (sıkıştırılmış) içerik
+                    new StoredField("content", Compress(content)),
+
+                    new StringField("modified_date", ticks.ToString(), Field.Store.YES),
+                    new StringField("size", size.ToString(), Field.Store.YES)
+                };
+
             return doc;
         }
 
@@ -750,6 +892,32 @@ namespace WpfIndexer.Services
             public List<SearchResult> Results { get; set; } = new List<SearchResult>();
             public Query? LuceneQuery { get; set; }
         }
+        private static byte[] Compress(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return Array.Empty<byte>();
+
+            using var output = new MemoryStream();
+            using (var gzip = new System.IO.Compression.GZipStream(output, System.IO.Compression.CompressionLevel.Fastest, true))
+            using (var writer = new StreamWriter(gzip))
+            {
+                writer.Write(text);
+            }
+
+            return output.ToArray();
+        }
+
+        private static string Decompress(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0)
+                return string.Empty;
+
+            using var input = new MemoryStream(bytes);
+            using var gzip = new System.IO.Compression.GZipStream(input, System.IO.Compression.CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip);
+            return reader.ReadToEnd();
+        }
+
         #endregion
     }
 }

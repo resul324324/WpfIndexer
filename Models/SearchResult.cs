@@ -1,40 +1,81 @@
 ﻿using System;
-using System.ComponentModel; // Bu using gerekli
-using System.Windows.Media; // Bu using gerekli
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using System.Windows.Media;
+using System.Windows.Documents;
+
+
+
+
 
 namespace WpfIndexer.Models
 {
-    public class SearchResult
+    public class SearchResult : INotifyPropertyChanged
     {
-        // --- Mevcut Özelliklerin ---
+        // --- Zorunlu Özellikler ---
         public required string Path { get; set; }
         public required string FileName { get; set; }
         public required string Extension { get; set; }
-        public string Snippet { get; set; } = "";
-        public long Size { get; set; }
         public required string IndexName { get; set; }
 
-        // --- YENİ EKLENEN ÖZELLİKLER ---
+        // --- Opsiyonel / Dolan Özellikler ---
+        public string Snippet { get; set; } = "";
+        public long Size { get; set; }
 
         /// <summary>
-        /// Dosyanın son değiştirilme tarihi. "Tarih" sütunu için.
+        /// Dosyanın klasör yolu
         /// </summary>
-        public DateTime ModificationDate { get; set; }
+        public string DirectoryPath { get; set; } = string.Empty;
 
         /// <summary>
-        /// Sadece dosyanın bulunduğu klasörün yolu. "Yol" sütunu için.
-        /// </summary>
-        public string DirectoryPath { get; set; }
-
-        /// <summary>
-        /// Dosyanın sistemdeki görünen tür adı ("Metin Belgesi" vb.). "Tür" sütunu için.
+        /// İnsan tarafından görülen dosya türü (Metin Belgesi vb.)
         /// </summary>
         public string FileType { get; set; } = string.Empty;
 
         /// <summary>
-        /// Dosya simgesi.
+        /// Dosya simgesi
         /// </summary>
-        [Browsable(false)] // Bu özellik DataGrid'de otomatik sütun olmasın
-        public ImageSource? FileIcon { get; set; } // Null olabilir
+        [Browsable(false)]
+        public ImageSource? FileIcon { get; set; }
+        // MADDE 18 – Snippet için FlowDocument
+        public FlowDocument? SnippetDocument { get; set; }
+
+
+        /// <summary>
+        /// Son değiştirilme tarihi
+        /// </summary>
+        public DateTime ModificationDate { get; set; }
+
+        // --- Thumbnail & Image Detection ---
+
+        public bool IsImage =>
+            Extension.Equals(".jpg", StringComparison.OrdinalIgnoreCase) ||
+            Extension.Equals(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+            Extension.Equals(".png", StringComparison.OrdinalIgnoreCase) ||
+            Extension.Equals(".bmp", StringComparison.OrdinalIgnoreCase) ||
+            Extension.Equals(".gif", StringComparison.OrdinalIgnoreCase) ||
+            Extension.Equals(".tiff", StringComparison.OrdinalIgnoreCase) ||
+            Extension.Equals(".webp", StringComparison.OrdinalIgnoreCase);
+
+        private ImageSource? _thumbnail;
+        public ImageSource? Thumbnail
+        {
+            get => _thumbnail;
+            set
+            {
+                _thumbnail = value;
+                OnPropertyChanged();
+            }
+        }
+
+        // --- INotifyPropertyChanged ---
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        protected void OnPropertyChanged([CallerMemberName] string? name = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
     }
+
 }

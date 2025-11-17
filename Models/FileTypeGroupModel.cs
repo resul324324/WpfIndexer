@@ -1,72 +1,84 @@
-﻿using System.Collections.ObjectModel;
+﻿using System;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System; // YENİ: Action için eklendi
 
 namespace WpfIndexer.Models
 {
     public class FileTypeGroupModel : INotifyPropertyChanged
     {
         public string GroupName { get; set; } = string.Empty;
+
         public ObservableCollection<FileTypeModel> FileTypes { get; set; } = new();
 
-        private bool _isSelected;
-        private bool _isUpdating = false; // Sonsuz döngüleri engellemek için
+        private bool _isUpdating = false;
 
-        // YENİ: Ebeveyn (VM) durumu güncellemek için
+        // VM'ye "grup seçimi değişti" bilgisini iletmek için
         private Action? _onGroupIsSelectedChanged;
 
+        /// <summary>
+        /// Grup seçili mi? En az bir eleman seçiliyse true döner.
+        /// </summary>
         public bool IsSelected
         {
-            get => _isSelected;
+            get => FileTypes.Any(f => f.IsSelected);
+
             set
             {
-                if (_isUpdating) return;
-                _isSelected = value;
+                if (_isUpdating)
+                    return;
 
-                // Ebeveyn (Grup) seçimi, tüm çocuklara yansıtılır
                 _isUpdating = true;
+
+                // --- SESSİZ MOD (Event fırlatmaz) ---
                 foreach (var type in FileTypes)
                 {
-                    type.IsSelected = value;
+                    type.SetIsSelectedSilent(value);
                 }
+
                 _isUpdating = false;
 
+                // UI sadece 1 defa güncellensin
                 OnPropertyChanged();
-                _onGroupIsSelectedChanged?.Invoke(); // YENİ: Ebeveyn VM'e haber ver
+                OnPropertyChanged(nameof(FileTypes));
+
+                // Parent VM'e haber ver
+                _onGroupIsSelectedChanged?.Invoke();
             }
         }
 
-        public FileTypeGroupModel()
+        public FileTypeGroupModel() { }
+
+        /// <summary>
+        /// Parent ViewModel, seçim değişimini buradan dinler.
+        /// </summary>
+        public void SetOnGroupSelectedChanged(Action callback)
         {
-            // Bu ctor, ViewModel'de doldurulduktan sonra kullanılacak
+            _onGroupIsSelectedChanged = callback;
         }
 
-        // YENİ: Ebeveyn VM'den geri aramayı ayarlamak için metot
-        public void SetOnGroupSelectedChanged(Action onGroupIsSelectedChanged)
-        {
-            _onGroupIsSelectedChanged = onGroupIsSelectedChanged;
-        }
-
-        // Çocuklardan biri değiştiğinde bu metot çağrılır
+        /// <summary>
+        /// Çocuklardan birinin IsSelected'i değiştiğinde çağrılır.
+        /// </summary>
         public void UpdateGroupSelectionState()
         {
-            if (_isUpdating) return;
+            if (_isUpdating)
+                return;
 
             _isUpdating = true;
-            if (FileTypes.All(f => f.IsSelected))
-            {
-                _isSelected = true;
-            }
-            else
-            {
-                _isSelected = false;
-            }
+
+            // Tüm alt elemanlar seçili ise grup da seçili görünür
+            bool newValue = FileTypes.Any(f => f.IsSelected);
+
+            // _isSelected diye extra alan tutmuyoruz
+            // direkt IsSelected property'si UI'da binding'i tetikliyor
             OnPropertyChanged(nameof(IsSelected));
+
             _isUpdating = false;
 
-            _onGroupIsSelectedChanged?.Invoke(); // YENİ: Ebeveyn VM'e haber ver
+            // Parent VM'e haber ver
+            _onGroupIsSelectedChanged?.Invoke();
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
