@@ -255,8 +255,7 @@ namespace WpfIndexer.Services
         {
             try
             {
-                // DÜZELTME: NPOI 2.7.5 + NPOI.HWPF 2.3.0
-                // bu yapıcıyı (constructor) kullanır
+                // NPOI 2.x için uygun yapıcı
                 var doc = new HWPFDocument(stream);
                 return doc.Text.ToString();
             }
@@ -276,7 +275,7 @@ namespace WpfIndexer.Services
                 for (int i = 0; i < workbook.NumberOfSheets; i++)
                 {
                     var sheet = workbook.GetSheetAt(i);
-                    // DÜZELTME: CS0104 - Belirsizliği önlemek için tam yolu (NPOI.SS.UserModel) belirtildi
+                    // Belirsizliği önlemek için NPOI.SS.UserModel türleri tam adla kullanılır
                     foreach (NPOI.SS.UserModel.IRow row in sheet)
                     {
                         foreach (NPOI.SS.UserModel.ICell cell in row)
@@ -294,10 +293,6 @@ namespace WpfIndexer.Services
                 return string.Empty;
             }
         }
-
-        // GÜNCELLEME: .ppt metodu kaldırıldı
-        // private static string ExtractTextFromPpt(Stream stream)
-        // { ... }
 
         // --- Mevcut OpenXML (docx, xlsx, pptx) Metin Çıkarıcılar ---
 

@@ -6,7 +6,6 @@ using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Search.Highlight;
 using Lucene.Net.Store;
-// Lucene 'using'
 using Lucene.Net.Util;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -16,8 +15,6 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-// DÜZELTME: 'Theme' enum'unun bulunduğu namespace'i ekliyoruz.
-
 using System.Collections.Specialized; // Dosya kopyalama (Clipboard) için EKLENDİ
 using System.ComponentModel;
 using System.Diagnostics;
@@ -165,7 +162,6 @@ namespace WpfIndexer.ViewModels
         }
 
         // Görünürlük Özellikleri
-        // MainViewModel.cs (Satır 137-140)
 
         public Visibility TextPreviewVisibility => UserSettings.EnablePreview &&
                                                   _selectedPreviewContent.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -180,9 +176,6 @@ namespace WpfIndexer.ViewModels
             {
                 if (!UserSettings.EnablePreview) return Visibility.Visible;
 
-                // DÜZELTME: 'PreviewMode' kontrolü kaldırıldı.
-                // Eğer metin içeriği yüklendiyse (_selectedPreviewContent > 0),
-                // bu panel her zaman gizlenmelidir.
                 if (UserSettings.EnablePreview &&
                     _selectedPreviewContent.Length > 0)
                 {
@@ -937,8 +930,7 @@ namespace WpfIndexer.ViewModels
 
             if (!terms.Any()) return htmlContent;
 
-            // DÜZELTME: Vurgulama <style> etiketleri içine (CSS) yazıldığı için
-            // buradaki stil (inline) kaldırıldı.
+            // Vurgulama, CSS yerine inline <mark> etiketleriyle yapılır.
             string pattern = "(>)([^<]*)(<)";
 
             return Regex.Replace(htmlContent, pattern, m =>
@@ -955,7 +947,7 @@ namespace WpfIndexer.ViewModels
             }, RegexOptions.CultureInvariant);
         }
 
-        // DÜZELTME: Kullanıcının sağladığı (Suggestion 1) stil metodu
+        // Temaya göre HTML stilini döndürür
         private string GetHtmlThemeStyles()
         {
             if (UserSettings.Theme.ToString() == "Dark")
@@ -1043,7 +1035,7 @@ namespace WpfIndexer.ViewModels
                                     XElement html = HtmlConverter.ConvertToHtml(wDoc, settings);
                                     htmlContent = html.ToString();
 
-                                    // DÜZELTME: HTML tema stilini enjekte et
+                                    // HTML tema stilini ekle
                                     htmlContent = htmlContent.Replace("</head>", themeStyle + "</head>");
                                 }
                             }
@@ -1130,7 +1122,7 @@ namespace WpfIndexer.ViewModels
                         htmlContent = html.ToString();
                     }, token);
                 }
-                // DÜZELTME: .TXT ve DİĞER METİN DOSYALARI İÇİN
+                // Düz metin dosyalarını HTML olarak sar
                 else if (extension is ".txt" or ".log" or ".xml" or ".json" or ".cs" or ".html" or ".css")
                 {
                     await Task.Run(async () =>
