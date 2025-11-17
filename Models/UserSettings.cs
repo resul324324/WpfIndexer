@@ -16,8 +16,6 @@ namespace WpfIndexer.Models
         Canli  // Gerçek dosya görünümü (yeni sistem)
     }
 
-    // DÜZELTME: Enum'u buraya, ana namespace'e taşıdım.
-    // İç içe olan "WpfIndexer.Models.WpfIndexer.Models" hatası düzeltildi.
     public enum PreviewPanePosition
     {
         Right,

@@ -158,7 +158,6 @@ namespace WpfIndexer.Helpers
         private static extern bool DestroyIcon(IntPtr hIcon);
 
         // SHGetFileInfo'nun ihtiyaç duyduğu Windows veri yapısı (struct)
-        // !!!!! DÜZELTME BURADA !!!!!
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
         private struct SHFILEINFO
         {
@@ -170,7 +169,6 @@ namespace WpfIndexer.Helpers
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)]
             public string szTypeName; // Dosya türü adı (örn: "Metin Belgesi")
         }
-        // !!!!! DÜZELTME BİTTİ !!!!!
 
 
         // SHGetFileInfo'ya gönderdiğimiz bayraklar (flags)

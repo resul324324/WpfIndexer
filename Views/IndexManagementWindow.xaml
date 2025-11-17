@@ -31,12 +31,8 @@
                     <GridViewColumn Header="İndeks Adı" Width="150">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <!-- 
-                                DÜZELTME: ToolTip buraya, doğrudan CheckBox'e eklendi.
-                                DÜZELTME: Hata CS0161, 'indexPath' (küçük i) 'IndexPath' (BÜYÜK I) olarak düzeltildi.
-                                -->
-                                <CheckBox Content="{Binding Name}" 
-                                          IsChecked="{Binding IsSelected}" 
+                                <CheckBox Content="{Binding Name}"
+                                          IsChecked="{Binding IsSelected}"
                                           ToolTip="{Binding IndexPath}"
                                           Style="{StaticResource BrandCheckBox}"/>
                             </DataTemplate>
@@ -48,8 +44,6 @@
 
                     <GridViewColumn Header="Son Güncelleme" Width="130"
                                     DisplayMemberBinding="{Binding LastUpdateDate, StringFormat='g'}" />
-
-                    <!-- DÜZELTME: Hata CS0161, 'indexPath' (küçük i) 'IndexPath' (BÜYÜK I) olarak düzeltildi. -->
                     <GridViewColumn Header="Yol" Width="300"
                                     DisplayMemberBinding="{Binding IndexPath}" />
                 </GridView>

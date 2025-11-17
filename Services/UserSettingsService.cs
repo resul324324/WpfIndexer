@@ -3,9 +3,6 @@ using System;
 using System.IO;
 using WpfIndexer.Models;
 
-// DÜZELTME: Bu satır, iç içe namespace hatasından kaynaklanıyordu. Kaldırıldı.
-// using WpfIndexer.Models.WpfIndexer.Models;
-
 namespace WpfIndexer.Services
 {
     public class UserSettingsService
